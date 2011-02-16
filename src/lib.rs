@@ -6,22 +6,25 @@ use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
 use std::io::Write;
 pub mod bgfx_shader;
+mod cffi;
 mod common;
 pub mod pass;
 pub mod property_field;
 pub mod sampler_definition;
 
 use crate::common::{optional_write, read_bool, read_string, write_string};
-pub const ALL_VERSIONS: [MinecraftVersion; 3] = [
+pub const ALL_VERSIONS: [MinecraftVersion; 4] = [
     MinecraftVersion::V1_18_30,
     MinecraftVersion::V1_19_60,
     MinecraftVersion::V1_20_80,
+    MinecraftVersion::V1_21_20,
 ];
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MinecraftVersion {
     V1_20_80,
     V1_19_60,
     V1_18_30,
+    V1_21_20,
 }
 
 impl Default for MinecraftVersion {
@@ -35,6 +38,7 @@ impl std::fmt::Display for MinecraftVersion {
             Self::V1_20_80 => write!(f, "1.20.80"),
             Self::V1_19_60 => write!(f, "1.19.60"),
             Self::V1_18_30 => write!(f, "1.18.30"),
+            Self::V1_21_20 => write!(f, "1.21.20"),
         }
     }
 }
@@ -70,6 +74,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
         let version: u64 = buffer.gread_with(&mut offset, LE)?;
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
         if encryption_variant != EncryptionVariant::None {
+            println!("file is encrypted");
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Not decrypting encrypted material",

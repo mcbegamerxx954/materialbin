@@ -18,6 +18,7 @@ pub struct SamplerDefinition {
     pub texture_format: String,
     pub unknown_int: u32,
     pub unknown_byte: u8,
+    pub unknown_optbyte: Option<u8>,
     pub default_texture: Option<String>,
     pub unknown_string: Option<String>,
     pub custom_type_info: Option<CustomTypeInfo>,
@@ -44,6 +45,16 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         if ctx != MinecraftVersion::V1_18_30 {
             unknown_byte = buffer.gread_with(&mut offset, LE)?;
         }
+        let mut unknown_optbyte = None;
+        if ctx == MinecraftVersion::V1_21_20 {
+            if read_bool(buffer, &mut offset)? {
+                let thing = buffer.gread::<u8>(&mut offset)?;
+                unknown_optbyte = Some(thing);
+            }
+            //            if read_bool(buffer, &mut offset)? {
+            //                unknown_optbyte = Some(buffer.gread::<u8>(&mut offset)?);
+            //            }
+        }
         let mut default_texture = None;
         let has_default_texture = read_bool(buffer, &mut offset)?;
         if has_default_texture {
@@ -51,7 +62,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         }
 
         let mut unknown_string = None;
-        if ctx == MinecraftVersion::V1_20_80 {
+        if ctx == MinecraftVersion::V1_20_80 || ctx == MinecraftVersion::V1_21_20 {
             let has_unknown_string = read_bool(buffer, &mut offset)?;
             if has_unknown_string {
                 unknown_string = Some(read_string(buffer, &mut offset)?);
@@ -62,6 +73,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         if has_custom_type {
             custom_type_info = Some(buffer.gread_with(&mut offset, ())?)
         }
+
         Ok((
             Self {
                 reg,
@@ -72,6 +84,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
                 texture_format,
                 unknown_int,
                 unknown_byte,
+                unknown_optbyte,
                 default_texture,
                 unknown_string,
                 custom_type_info,
@@ -99,15 +112,19 @@ impl SamplerDefinition {
         if version != MinecraftVersion::V1_18_30 {
             writer.write_u8(self.unknown_byte)?;
         }
+        if version == MinecraftVersion::V1_21_20 {
+                       optional_write(writer, self.unknown_optbyte, |o, v| o.write_u8(v))?;
+        }
         optional_write(writer, self.default_texture.as_deref(), |o, v| {
             write_string(v, o)
         })?;
-        if version == MinecraftVersion::V1_20_80 {
+        if version == MinecraftVersion::V1_20_80 || version == MinecraftVersion::V1_21_20 {
             optional_write(writer, self.unknown_string.as_deref(), |o, v| {
                 write_string(v, o)
             })?;
         }
         optional_write(writer, self.custom_type_info.as_ref(), |o, v| v.write(o))?;
+
         Ok(())
     }
 }
@@ -148,6 +165,7 @@ pub enum SamplerType {
     TypeAccelerationStructure,
     Type2DShadow,
     Type2DArrayShadow,
+    Aah,
 }
 impl<'a> TryFromCtx<'a> for SamplerType {
     type Error = scroll::Error;
@@ -164,6 +182,7 @@ impl<'a> TryFromCtx<'a> for SamplerType {
             7 => Self::TypeAccelerationStructure,
             8 => Self::Type2DShadow,
             9 => Self::Type2DArrayShadow,
+            10 => Self::Aah,
             _ => {
                 return Err(scroll::Error::Custom(format!(
                     "Invalid sapmler_type: {sampler_type}"
@@ -186,6 +205,7 @@ impl SamplerType {
             Self::TypeAccelerationStructure => 7,
             Self::Type2DShadow => 8,
             Self::Type2DArrayShadow => 9,
+            Self::Aah => 10,
         }
     }
 }
