@@ -6,10 +6,10 @@ pub fn read_bool(buffer: &[u8], offset: &mut usize) -> Result<bool, scroll::Erro
     let bool_u8: u8 = buffer.gread_with(offset, LE)?;
     Ok(bool_u8 != 0)
 }
-pub fn read_string<'a>(buffer: &'a [u8], offset: &mut usize) -> Result<&'a str, scroll::Error> {
+pub fn read_string<'a>(buffer: &'a [u8], offset: &mut usize) -> Result<String, scroll::Error> {
     let str_len: u32 = buffer.gread_with(offset, LE)?;
     let str: &str = buffer.gread_with(offset, StrCtx::Length(str_len as usize))?;
-    Ok(str)
+    Ok(str.to_string())
 }
 pub fn write_string<W>(string: &str, writer: &mut W) -> Result<(), WriteError>
 where

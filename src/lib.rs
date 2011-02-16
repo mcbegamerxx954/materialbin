@@ -40,16 +40,16 @@ impl std::fmt::Display for MinecraftVersion {
 }
 
 #[derive(Debug)]
-pub struct CompiledMaterialDefinition<'a> {
+pub struct CompiledMaterialDefinition {
     pub version: u64,
     pub encryption_variant: EncryptionVariant,
-    pub name: &'a str,
-    pub parent_name: Option<&'a str>,
-    pub sampler_definitions: IndexMap<&'a str, SamplerDefinition<'a>>,
-    pub property_fields: IndexMap<&'a str, PropertyField<'a>>,
-    pub passes: IndexMap<&'a str, Pass<'a>>,
+    pub name: String,
+    pub parent_name: Option<String>,
+    pub sampler_definitions: IndexMap<String, SamplerDefinition>,
+    pub property_fields: IndexMap<String, PropertyField>,
+    pub passes: IndexMap<String, Pass>,
 }
-impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
+impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
@@ -117,7 +117,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
         ))
     }
 }
-impl<'a> CompiledMaterialDefinition<'a> {
+impl CompiledMaterialDefinition {
     pub fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
@@ -127,8 +127,10 @@ impl<'a> CompiledMaterialDefinition<'a> {
         write_string("RenderDragon.CompiledMaterialDefinition", writer)?;
         writer.write_u64::<LittleEndian>(self.version)?;
         self.encryption_variant.write(writer)?;
-        write_string(self.name, writer)?;
-        optional_write(writer, self.parent_name, |o, v| write_string(v, o))?;
+        write_string(&self.name, writer)?;
+        optional_write(writer, self.parent_name.as_deref(), |o, v| {
+            write_string(v, o)
+        })?;
         let len = self.sampler_definitions.len().try_into()?;
         writer.write_u8(len)?;
         for (name, sampler_definition) in self.sampler_definitions.iter() {

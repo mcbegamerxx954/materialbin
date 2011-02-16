@@ -10,31 +10,31 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct Pass<'a> {
-    pub bitset: &'a str,
-    pub fallback: &'a str,
+pub struct Pass {
+    pub bitset: String,
+    pub fallback: String,
     pub default_blendmode: Option<BlendMode>,
-    pub default_flag_values: IndexMap<&'a str, &'a str>,
-    pub variants: Vec<Variant<'a>>,
+    pub default_flag_values: IndexMap<String, String>,
+    pub variants: Vec<Variant>,
 }
-impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass<'a> {
+impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
     type Error = scroll::Error;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        let mut bitset = "";
-        if ctx == MinecraftVersion::V1_18_30 {
+        let bitset = if ctx == MinecraftVersion::V1_18_30 {
             let has_bitset = buffer.gread_with::<u8>(&mut offset, LE)? == 15;
             // rewind
             offset -= 4;
             if has_bitset {
-                bitset = read_string(buffer, &mut offset)?;
+                read_string(buffer, &mut offset)?
             } else {
                 // skip reading byte we have no use for
                 offset += 1;
+                "".to_string()
             }
         } else {
-            bitset = read_string(buffer, &mut offset)?;
-        }
+            read_string(buffer, &mut offset)?
+        };
         let fallback = read_string(buffer, &mut offset)?;
         let mut default_blendmode: Option<BlendMode> = None;
         let has_blendmode = read_bool(buffer, &mut offset)?;
@@ -66,7 +66,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass<'a> {
         ))
     }
 }
-impl<'a> Pass<'a> {
+impl Pass {
     pub fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
@@ -77,16 +77,16 @@ impl<'a> Pass<'a> {
             ));
         } else if version == MinecraftVersion::V1_18_30 {
         }
-        write_string(self.bitset, writer)?;
-        write_string(self.fallback, writer)?;
+        write_string(&self.bitset, writer)?;
+        write_string(&self.fallback, writer)?;
         optional_write(writer, self.default_blendmode.as_ref(), |o, v| {
             o.write_u16::<LittleEndian>(v.as_u16())
         })?;
         let len = self.default_flag_values.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for (key, value) in self.default_flag_values.iter() {
-            write_string(key, writer)?;
-            write_string(value, writer)?;
+            write_string(&key, writer)?;
+            write_string(&value, writer)?;
         }
         let len = self.variants.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
@@ -97,12 +97,12 @@ impl<'a> Pass<'a> {
     }
 }
 #[derive(Debug)]
-pub struct Variant<'a> {
+pub struct Variant {
     pub is_supported: bool,
-    pub flags: IndexMap<&'a str, &'a str>,
-    pub shader_codes: IndexMap<PlatformShaderStage<'a>, ShaderCode<'a>>,
+    pub flags: IndexMap<String, String>,
+    pub shader_codes: IndexMap<PlatformShaderStage, ShaderCode>,
 }
-impl<'a> TryFromCtx<'a> for Variant<'a> {
+impl<'a> TryFromCtx<'a> for Variant {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
@@ -132,7 +132,7 @@ impl<'a> TryFromCtx<'a> for Variant<'a> {
         ))
     }
 }
-impl<'a> Variant<'a> {
+impl Variant {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
@@ -143,8 +143,8 @@ impl<'a> Variant<'a> {
         let len = self.shader_codes.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for flag in self.flags.iter() {
-            write_string(flag.0, writer)?;
-            write_string(flag.1, writer)?;
+            write_string(&flag.0, writer)?;
+            write_string(&flag.1, writer)?;
         }
         for (platform_stage, code) in self.shader_codes.iter() {
             platform_stage.write(writer)?;
@@ -256,12 +256,12 @@ impl<'a> TryFromCtx<'a> for ShaderCodePlatform {
     }
 }
 #[derive(Debug)]
-pub struct ShaderCode<'a> {
-    pub shader_inputs: IndexMap<&'a str, ShaderInput>,
+pub struct ShaderCode {
+    pub shader_inputs: IndexMap<String, ShaderInput>,
     pub source_hash: u64,
     pub bgfx_shader_data: Vec<u8>,
 }
-impl<'a> TryFromCtx<'a> for ShaderCode<'a> {
+impl<'a> TryFromCtx<'a> for ShaderCode {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
@@ -288,7 +288,7 @@ impl<'a> TryFromCtx<'a> for ShaderCode<'a> {
         ))
     }
 }
-impl<'a> ShaderCode<'a> {
+impl ShaderCode {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
@@ -296,7 +296,7 @@ impl<'a> ShaderCode<'a> {
         let len = self.shader_inputs.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for (name, input) in self.shader_inputs.iter() {
-            write_string(name, writer)?;
+            write_string(&name, writer)?;
             input.write(writer)?;
         }
         writer.write_u64::<LittleEndian>(self.source_hash)?;
@@ -568,13 +568,13 @@ impl<'a> TryFromCtx<'a> for ShaderStage {
     }
 }
 #[derive(Eq, PartialEq, Hash, Debug)]
-pub struct PlatformShaderStage<'a> {
-    pub stage_name: &'a str,
-    pub platform_name: &'a str,
+pub struct PlatformShaderStage {
+    pub stage_name: String,
+    pub platform_name: String,
     pub stage: ShaderStage,
     pub platform: ShaderCodePlatform,
 }
-impl<'a> TryFromCtx<'a> for PlatformShaderStage<'a> {
+impl<'a> TryFromCtx<'a> for PlatformShaderStage {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
@@ -594,13 +594,13 @@ impl<'a> TryFromCtx<'a> for PlatformShaderStage<'a> {
         ))
     }
 }
-impl<'a> PlatformShaderStage<'a> {
+impl PlatformShaderStage {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {
-        write_string(self.stage_name, writer)?;
-        write_string(self.platform_name, writer)?;
+        write_string(&self.stage_name, writer)?;
+        write_string(&self.platform_name, writer)?;
         writer.write_u8(self.stage as u8)?;
         writer.write_u8(self.platform as u8)?;
         Ok(())

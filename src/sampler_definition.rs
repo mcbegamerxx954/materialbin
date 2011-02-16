@@ -9,20 +9,20 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct SamplerDefinition<'a> {
+pub struct SamplerDefinition {
     pub reg: u16,
     pub access: SamplerAccess,
     pub precision: u8,
     pub allow_unordered_access: u8,
     pub sampler_type: SamplerType,
-    pub texture_format: &'a str,
+    pub texture_format: String,
     pub unknown_int: u32,
     pub unknown_byte: u8,
-    pub default_texture: Option<&'a str>,
-    pub unknown_string: Option<&'a str>,
-    pub custom_type_info: Option<CustomTypeInfo<'a>>,
+    pub default_texture: Option<String>,
+    pub unknown_string: Option<String>,
+    pub custom_type_info: Option<CustomTypeInfo>,
 }
-impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
+impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
     type Error = scroll::Error;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
@@ -44,13 +44,13 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
         if ctx != MinecraftVersion::V1_18_30 {
             unknown_byte = buffer.gread_with(&mut offset, LE)?;
         }
-        let mut default_texture: Option<&str> = None;
+        let mut default_texture = None;
         let has_default_texture = read_bool(buffer, &mut offset)?;
         if has_default_texture {
             default_texture = Some(read_string(buffer, &mut offset)?);
         }
 
-        let mut unknown_string: Option<&str> = None;
+        let mut unknown_string = None;
         if ctx == MinecraftVersion::V1_20_80 {
             let has_unknown_string = read_bool(buffer, &mut offset)?;
             if has_unknown_string {
@@ -80,7 +80,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
         ))
     }
 }
-impl<'a> SamplerDefinition<'a> {
+impl SamplerDefinition {
     pub fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
@@ -94,25 +94,29 @@ impl<'a> SamplerDefinition<'a> {
         writer.write_u8(self.precision)?;
         writer.write_u8(self.allow_unordered_access)?;
         writer.write_u8(self.sampler_type.to_u8())?;
-        write_string(self.texture_format, writer)?;
+        write_string(&self.texture_format, writer)?;
         writer.write_u32::<LittleEndian>(self.unknown_int)?;
         if version != MinecraftVersion::V1_18_30 {
             writer.write_u8(self.unknown_byte)?;
         }
-        optional_write(writer, self.default_texture, |o, v| write_string(v, o))?;
+        optional_write(writer, self.default_texture.as_deref(), |o, v| {
+            write_string(v, o)
+        })?;
         if version == MinecraftVersion::V1_20_80 {
-            optional_write(writer, self.unknown_string, |o, v| write_string(v, o))?;
+            optional_write(writer, self.unknown_string.as_deref(), |o, v| {
+                write_string(v, o)
+            })?;
         }
         optional_write(writer, self.custom_type_info.as_ref(), |o, v| v.write(o))?;
         Ok(())
     }
 }
 #[derive(Debug)]
-pub struct CustomTypeInfo<'a> {
-    pub name: &'a str,
+pub struct CustomTypeInfo {
+    pub name: String,
     pub size: u32,
 }
-impl<'a> TryFromCtx<'a> for CustomTypeInfo<'a> {
+impl<'a> TryFromCtx<'a> for CustomTypeInfo {
     type Error = scroll::Error;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
@@ -121,12 +125,12 @@ impl<'a> TryFromCtx<'a> for CustomTypeInfo<'a> {
         Ok((Self { name, size }, offset))
     }
 }
-impl<'a> CustomTypeInfo<'a> {
+impl CustomTypeInfo {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {
-        write_string(self.name, writer)?;
+        write_string(&self.name, writer)?;
         writer.write_u32::<LittleEndian>(self.size)?;
         Ok(())
     }

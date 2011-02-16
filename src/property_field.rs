@@ -3,13 +3,13 @@ use byteorder::WriteBytesExt;
 use scroll::{ctx::TryFromCtx, Pread};
 use std::io::Write;
 #[derive(Debug)]
-pub struct PropertyField<'a> {
+pub struct PropertyField {
     pub field_type: PropertyType,
     pub num: u32,
-    pub vector_data: Option<&'a [u8]>,
-    pub matrix_data: Option<&'a [u8]>,
+    pub vector_data: Option<Vec<u8>>,
+    pub matrix_data: Option<Vec<u8>>,
 }
-impl<'a> TryFromCtx<'a> for PropertyField<'a> {
+impl<'a> TryFromCtx<'a> for PropertyField {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
@@ -24,15 +24,15 @@ impl<'a> TryFromCtx<'a> for PropertyField<'a> {
         if has_data {
             match field_type {
                 PropertyType::Vec4 => {
-                    vector_data = Some(&buffer[offset..offset + 16_usize]);
+                    vector_data = Some(buffer[offset..offset + 16_usize].to_vec());
                     offset += 16;
                 }
                 PropertyType::Mat3 => {
-                    matrix_data = Some(&buffer[offset..offset + 36_usize]);
+                    matrix_data = Some(buffer[offset..offset + 36_usize].to_vec());
                     offset += 36;
                 }
                 PropertyType::Mat4 => {
-                    matrix_data = Some(&buffer[offset..offset + 64_usize]);
+                    matrix_data = Some(buffer[offset..offset + 64_usize].to_vec());
                     offset += 64;
                 }
                 // We do nothing
@@ -50,7 +50,7 @@ impl<'a> TryFromCtx<'a> for PropertyField<'a> {
         ))
     }
 }
-impl<'a> PropertyField<'a> {
+impl PropertyField {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
@@ -68,13 +68,13 @@ impl<'a> PropertyField<'a> {
             }
             PropertyType::Mat3 => {
                 writer.write_u8(self.matrix_data.is_some().into())?;
-                if let Some(data) = self.matrix_data {
+                if let Some(data) = &self.matrix_data {
                     writer.write_all(data)?;
                 }
             }
             PropertyType::Mat4 => {
                 writer.write_u8(self.matrix_data.is_some().into())?;
-                if let Some(data) = self.matrix_data {
+                if let Some(data) = &self.matrix_data {
                     writer.write_all(data)?;
                 }
             }
