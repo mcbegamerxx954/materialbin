@@ -8,7 +8,11 @@ use scroll::{
 use std::io::Write;
 
 use thiserror::Error;
-
+pub const ALL_VERSIONS: [MinecraftVersion; 3] = [
+    MinecraftVersion::V1_18_30,
+    MinecraftVersion::V1_19_60,
+    MinecraftVersion::V1_20_80,
+];
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MinecraftVersion {
     V1_20_80,
@@ -24,9 +28,9 @@ impl Default for MinecraftVersion {
 impl std::fmt::Display for MinecraftVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::V1_20_80 => write!(f, "v1.20.80"),
-            Self::V1_19_60 => write!(f, "v1.19.60"),
-            Self::V1_18_30 => write!(f, "v1.18.30"),
+            Self::V1_20_80 => write!(f, "1.20.80"),
+            Self::V1_19_60 => write!(f, "1.19.60"),
+            Self::V1_18_30 => write!(f, "1.18.30"),
         }
     }
 }
