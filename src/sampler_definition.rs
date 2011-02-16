@@ -10,17 +10,17 @@ use crate::{
 
 #[derive(Debug)]
 pub struct SamplerDefinition<'a> {
-    reg: u16,
-    access: SamplerAccess,
-    precision: u8,
-    allow_unordered_access: u8,
-    sampler_type: SamplerType,
-    texture_format: &'a str,
-    unknown_int: u32,
-    unknown_byte: u8,
-    default_texture: Option<&'a str>,
-    unknown_string: Option<&'a str>,
-    custom_type_info: Option<CustomTypeInfo<'a>>,
+    pub reg: u16,
+    pub access: SamplerAccess,
+    pub precision: u8,
+    pub allow_unordered_access: u8,
+    pub sampler_type: SamplerType,
+    pub texture_format: &'a str,
+    pub unknown_int: u32,
+    pub unknown_byte: u8,
+    pub default_texture: Option<&'a str>,
+    pub unknown_string: Option<&'a str>,
+    pub custom_type_info: Option<CustomTypeInfo<'a>>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
     type Error = scroll::Error;
@@ -108,9 +108,9 @@ impl<'a> SamplerDefinition<'a> {
     }
 }
 #[derive(Debug)]
-struct CustomTypeInfo<'a> {
-    name: &'a str,
-    size: u32,
+pub struct CustomTypeInfo<'a> {
+    pub name: &'a str,
+    pub size: u32,
 }
 impl<'a> TryFromCtx<'a> for CustomTypeInfo<'a> {
     type Error = scroll::Error;
@@ -122,7 +122,7 @@ impl<'a> TryFromCtx<'a> for CustomTypeInfo<'a> {
     }
 }
 impl<'a> CustomTypeInfo<'a> {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {
@@ -133,7 +133,7 @@ impl<'a> CustomTypeInfo<'a> {
 }
 
 #[derive(Debug)]
-enum SamplerType {
+pub enum SamplerType {
     Type2D,
     Type2DArray,
     Type2DExternal,
@@ -186,7 +186,7 @@ impl SamplerType {
     }
 }
 #[derive(Debug)]
-enum SamplerAccess {
+pub enum SamplerAccess {
     None,
     Read,
     Write,

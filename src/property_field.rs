@@ -4,10 +4,10 @@ use scroll::{ctx::TryFromCtx, Pread};
 use std::io::Write;
 #[derive(Debug)]
 pub struct PropertyField<'a> {
-    field_type: PropertyType,
-    num: u32,
-    vector_data: Option<&'a [u8]>,
-    matrix_data: Option<&'a [u8]>,
+    pub field_type: PropertyType,
+    pub num: u32,
+    pub vector_data: Option<&'a [u8]>,
+    pub matrix_data: Option<&'a [u8]>,
 }
 impl<'a> TryFromCtx<'a> for PropertyField<'a> {
     type Error = scroll::Error;
@@ -85,7 +85,7 @@ impl<'a> PropertyField<'a> {
     }
 }
 #[derive(Debug, PartialEq)]
-enum PropertyType {
+pub enum PropertyType {
     Vec4,
     Mat3,
     Mat4,
@@ -111,7 +111,7 @@ impl<'a> TryFromCtx<'a> for PropertyType {
     }
 }
 impl PropertyType {
-    fn to_u16(&self) -> u16 {
+    pub fn to_u16(&self) -> u16 {
         match self {
             Self::Vec4 => 2,
             Self::Mat3 => 3,

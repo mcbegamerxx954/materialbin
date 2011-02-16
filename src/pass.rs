@@ -11,11 +11,11 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Pass<'a> {
-    bitset: &'a str,
-    fallback: &'a str,
-    default_blendmode: Option<BlendMode>,
-    default_flag_values: IndexMap<&'a str, &'a str>,
-    variants: Vec<Variant<'a>>,
+    pub bitset: &'a str,
+    pub fallback: &'a str,
+    pub default_blendmode: Option<BlendMode>,
+    pub default_flag_values: IndexMap<&'a str, &'a str>,
+    pub variants: Vec<Variant<'a>>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass<'a> {
     type Error = scroll::Error;
@@ -41,14 +41,15 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass<'a> {
         if has_blendmode {
             default_blendmode = Some(buffer.gread_with(&mut offset, ())?);
         }
+
         let flag_dvalue_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut default_flag_values = IndexMap::with_capacity(flag_dvalue_count.into());
-
         for _ in 0..flag_dvalue_count {
             let key = read_string(buffer, &mut offset)?;
             let value = read_string(buffer, &mut offset)?;
             default_flag_values.insert(key, value);
         }
+
         let variant_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let variants: Vec<Variant> = (0..variant_count)
             .flat_map(|_| buffer.gread(&mut offset))
@@ -96,10 +97,10 @@ impl<'a> Pass<'a> {
     }
 }
 #[derive(Debug)]
-struct Variant<'a> {
-    is_supported: bool,
-    flags: IndexMap<&'a str, &'a str>,
-    shader_codes: IndexMap<PlatformShaderStage<'a>, ShaderCode<'a>>,
+pub struct Variant<'a> {
+    pub is_supported: bool,
+    pub flags: IndexMap<&'a str, &'a str>,
+    pub shader_codes: IndexMap<PlatformShaderStage<'a>, ShaderCode<'a>>,
 }
 impl<'a> TryFromCtx<'a> for Variant<'a> {
     type Error = scroll::Error;
@@ -132,7 +133,7 @@ impl<'a> TryFromCtx<'a> for Variant<'a> {
     }
 }
 impl<'a> Variant<'a> {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {
@@ -155,7 +156,7 @@ impl<'a> Variant<'a> {
 }
 #[derive(PartialEq, Eq, Debug)]
 #[repr(u16)]
-enum BlendMode {
+pub enum BlendMode {
     None,
     Replace,
     AlphaBlend,
@@ -211,7 +212,7 @@ impl BlendMode {
 }
 #[derive(PartialEq, Eq, Hash, Copy, Clone, Debug)]
 #[repr(u8)]
-enum ShaderCodePlatform {
+pub enum ShaderCodePlatform {
     Direct3DSm40, //Windows
     Direct3DSm50, //Windows
     Direct3DSm60, //Windows
@@ -255,17 +256,16 @@ impl<'a> TryFromCtx<'a> for ShaderCodePlatform {
     }
 }
 #[derive(Debug)]
-struct ShaderCode<'a> {
-    shader_inputs: IndexMap<&'a str, ShaderInput>,
-    source_hash: u64,
-    bgfx_shader_data: &'a [u8],
+pub struct ShaderCode<'a> {
+    pub shader_inputs: IndexMap<&'a str, ShaderInput>,
+    pub source_hash: u64,
+    pub bgfx_shader_data: Vec<u8>,
 }
 impl<'a> TryFromCtx<'a> for ShaderCode<'a> {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-
         let input_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut shader_inputs = IndexMap::with_capacity(input_count.into());
         for _ in 0..input_count {
@@ -275,8 +275,9 @@ impl<'a> TryFromCtx<'a> for ShaderCode<'a> {
         }
         let source_hash: u64 = buffer.gread_with(&mut offset, LE)?;
         let bsd_len: u32 = buffer.gread_with(&mut offset, LE)?;
-        let bgfx_shader_data = &buffer[offset..offset + bsd_len as usize];
-        offset += bsd_len as usize;
+        let bsd_size: usize = bsd_len.try_into().unwrap();
+        let bgfx_shader_data = buffer[offset..offset + bsd_size].to_vec();
+        offset += bsd_size;
         Ok((
             Self {
                 shader_inputs,
@@ -288,7 +289,7 @@ impl<'a> TryFromCtx<'a> for ShaderCode<'a> {
     }
 }
 impl<'a> ShaderCode<'a> {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {
@@ -301,17 +302,17 @@ impl<'a> ShaderCode<'a> {
         writer.write_u64::<LittleEndian>(self.source_hash)?;
         let len: u32 = self.bgfx_shader_data.len().try_into()?;
         writer.write_u32::<byteorder::LittleEndian>(len)?;
-        writer.write_all(self.bgfx_shader_data)?;
+        writer.write_all(&self.bgfx_shader_data)?;
         Ok(())
     }
 }
 #[derive(Debug)]
-struct ShaderInput {
-    input_type: ShaderInputType,
-    attribute: Attribute,
-    is_per_instance: bool,
-    precision_constraint: Option<PrecisionConstraint>,
-    interpolation_constraint: Option<InterpolationConstraint>,
+pub struct ShaderInput {
+    pub input_type: ShaderInputType,
+    pub attribute: Attribute,
+    pub is_per_instance: bool,
+    pub precision_constraint: Option<PrecisionConstraint>,
+    pub interpolation_constraint: Option<InterpolationConstraint>,
 }
 
 impl<'a> TryFromCtx<'a> for ShaderInput {
@@ -345,7 +346,7 @@ impl<'a> TryFromCtx<'a> for ShaderInput {
 }
 
 impl ShaderInput {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {
@@ -365,7 +366,7 @@ impl ShaderInput {
 }
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
 #[repr(u8)]
-enum ShaderInputType {
+pub enum ShaderInputType {
     Float,
     Vec2,
     Vec3,
@@ -406,7 +407,7 @@ impl<'a> TryFromCtx<'a> for ShaderInputType {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(u8)]
-enum PrecisionConstraint {
+pub enum PrecisionConstraint {
     Low,
     Medium,
     High,
@@ -431,7 +432,7 @@ impl<'a> TryFromCtx<'a> for PrecisionConstraint {
 }
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(u8)]
-enum InterpolationConstraint {
+pub enum InterpolationConstraint {
     Flat,
     Smooth,
     NoPerspective,
@@ -456,7 +457,7 @@ impl<'a> TryFromCtx<'a> for InterpolationConstraint {
     }
 }
 #[derive(Debug)]
-enum Attribute {
+pub enum Attribute {
     Position,
     Normal,
     Tangent,
@@ -545,10 +546,11 @@ impl Attribute {
 }
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 #[repr(u8)]
-enum ShaderStage {
+pub enum ShaderStage {
     Vertex,
     Fragment,
     Compute,
+    Unknown,
 }
 
 impl<'a> TryFromCtx<'a> for ShaderStage {
@@ -559,27 +561,28 @@ impl<'a> TryFromCtx<'a> for ShaderStage {
             0 => Self::Vertex,
             1 => Self::Fragment,
             2 => Self::Compute,
+            3 => Self::Unknown,
             _ => return Err(scroll::Error::Custom(format!("Invalid ShaderStage: {int}"))),
         };
         Ok((enum_type, 1))
     }
 }
 #[derive(Eq, PartialEq, Hash, Debug)]
-struct PlatformShaderStage<'a> {
-    stage_name: &'a str,
-    platform_name: &'a str,
-    stage: ShaderStage,
-    platform: ShaderCodePlatform,
+pub struct PlatformShaderStage<'a> {
+    pub stage_name: &'a str,
+    pub platform_name: &'a str,
+    pub stage: ShaderStage,
+    pub platform: ShaderCodePlatform,
 }
 impl<'a> TryFromCtx<'a> for PlatformShaderStage<'a> {
     type Error = scroll::Error;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        let stage_name = read_string(buffer, &mut offset)?;
-        let platform_name = read_string(buffer, &mut offset)?;
-        let stage: ShaderStage = buffer.gread(&mut offset)?;
-        let platform: ShaderCodePlatform = buffer.gread(&mut offset)?;
+        let stage_name = read_string(buffer, &mut offset).unwrap();
+        let platform_name = read_string(buffer, &mut offset).unwrap();
+        let stage: ShaderStage = buffer.gread(&mut offset).unwrap();
+        let platform: ShaderCodePlatform = buffer.gread(&mut offset).unwrap();
         Ok((
             Self {
                 stage_name,
@@ -592,7 +595,7 @@ impl<'a> TryFromCtx<'a> for PlatformShaderStage<'a> {
     }
 }
 impl<'a> PlatformShaderStage<'a> {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
     {

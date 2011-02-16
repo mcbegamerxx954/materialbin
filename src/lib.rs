@@ -5,10 +5,11 @@ use property_field::PropertyField;
 use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
 use std::io::Write;
+pub mod bgfx_shader;
 mod common;
-mod pass;
-mod property_field;
-mod sampler_definition;
+pub mod pass;
+pub mod property_field;
+pub mod sampler_definition;
 
 use crate::common::{optional_write, read_bool, read_string, write_string};
 pub const ALL_VERSIONS: [MinecraftVersion; 3] = [
@@ -40,13 +41,13 @@ impl std::fmt::Display for MinecraftVersion {
 
 #[derive(Debug)]
 pub struct CompiledMaterialDefinition<'a> {
-    version: u64,
-    encryption_variant: EncryptionVariant,
-    name: &'a str,
-    parent_name: Option<&'a str>,
-    sampler_definitions: IndexMap<&'a str, SamplerDefinition<'a>>,
-    property_fields: IndexMap<&'a str, PropertyField<'a>>,
-    passes: IndexMap<&'a str, Pass<'a>>,
+    pub version: u64,
+    pub encryption_variant: EncryptionVariant,
+    pub name: &'a str,
+    pub parent_name: Option<&'a str>,
+    pub sampler_definitions: IndexMap<&'a str, SamplerDefinition<'a>>,
+    pub property_fields: IndexMap<&'a str, PropertyField<'a>>,
+    pub passes: IndexMap<&'a str, Pass<'a>>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
     type Error = scroll::Error;
@@ -87,7 +88,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
             let sampler_definition: SamplerDefinition = buffer.gread_with(&mut offset, ctx)?;
             sampler_definitions.insert(name, sampler_definition);
         }
-
         let property_field_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut property_fields = IndexMap::with_capacity(property_field_count.into());
         for _ in 0..property_field_count {
@@ -95,7 +95,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
-
         let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut passes = IndexMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
@@ -154,7 +153,7 @@ impl<'a> CompiledMaterialDefinition<'a> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-enum EncryptionVariant {
+pub enum EncryptionVariant {
     None,
     SimplePassphrase,
     KeyPair,
