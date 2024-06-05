@@ -9,15 +9,25 @@ use std::io::Write;
 
 use thiserror::Error;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MinecraftVersion {
     V1_20_80,
     V1_19_60,
     V1_18_30,
 }
+
 impl Default for MinecraftVersion {
     fn default() -> Self {
         Self::V1_20_80
+    }
+}
+impl std::fmt::Display for MinecraftVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::V1_20_80 => write!(f, "v1.20.80"),
+            Self::V1_19_60 => write!(f, "v1.19.60"),
+            Self::V1_18_30 => write!(f, "v1.18.30"),
+        }
     }
 }
 
@@ -63,7 +73,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
         if has_parent_name {
             parent_name = Some(read_string(buffer, &mut offset)?);
         }
-        println!("Parsng sampler def");
+
         let sampler_definition_count: u8 = buffer.gread_with(&mut offset, LE)?;
         let mut sampler_definitions = HashMap::with_capacity(sampler_definition_count.into());
         for _ in 0..sampler_definition_count {
@@ -71,7 +81,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
             let sampler_definition: SamplerDefinition = buffer.gread_with(&mut offset, ctx)?;
             sampler_definitions.insert(name, sampler_definition);
         }
-        println!("parsing props");
+
         let property_field_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut property_fields = HashMap::with_capacity(property_field_count.into());
         for _ in 0..property_field_count {
@@ -79,7 +89,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
-        println!("parsing passes");
+
         let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut passes = HashMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
@@ -88,13 +98,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
             passes.insert(name, pass);
         }
         let end: u64 = buffer.gread_with(&mut offset, LE)?;
-        if end != MAGIC {
-            return Err(scroll::Error::BadInput {
-                size: offset,
-                msg: "Invalid end magic",
-            });
-        }
-
         Ok((
             Self {
                 version,
@@ -110,7 +113,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition<'a> {
     }
 }
 impl<'a> CompiledMaterialDefinition<'a> {
-    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
     {
@@ -125,7 +128,7 @@ impl<'a> CompiledMaterialDefinition<'a> {
         writer.write_u8(len)?;
         for (name, sampler_definition) in self.sampler_definitions.iter() {
             write_string(name, writer)?;
-            sampler_definition.write(writer)?;
+            sampler_definition.write(writer, version)?;
         }
         let len = self.property_fields.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
@@ -137,7 +140,7 @@ impl<'a> CompiledMaterialDefinition<'a> {
         writer.write_u16::<LittleEndian>(len)?;
         for (name, pass) in self.passes.iter() {
             write_string(name, writer)?;
-            pass.write(writer)?;
+            pass.write(writer, version)?;
         }
         writer.write_u64::<LittleEndian>(MAGIC)?;
         Ok(())
@@ -203,6 +206,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
         let allow_unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;
         let sampler_type: SamplerType = buffer.gread_with(&mut offset, ())?;
         let texture_format = read_string(buffer, &mut offset)?;
+
         let unknown_int: u32 = buffer.gread_with(&mut offset, LE)?;
         let mut unknown_byte: u8 = reg
             .try_into()
@@ -247,20 +251,28 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
     }
 }
 impl<'a> SamplerDefinition<'a> {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
     {
-        writer.write_u16::<LittleEndian>(self.reg)?;
+        if version == MinecraftVersion::V1_18_30 {
+            writer.write_u8(self.reg.try_into()?)?;
+        } else {
+            writer.write_u16::<LittleEndian>(self.reg)?;
+        }
         writer.write_u8(self.access.as_u8())?;
         writer.write_u8(self.precision)?;
         writer.write_u8(self.allow_unordered_access)?;
         writer.write_u8(self.sampler_type.to_u8())?;
         write_string(self.texture_format, writer)?;
         writer.write_u32::<LittleEndian>(self.unknown_int)?;
-        writer.write_u8(self.unknown_byte)?;
+        if version != MinecraftVersion::V1_18_30 {
+            writer.write_u8(self.unknown_byte)?;
+        }
         optional_write(writer, self.default_texture, |o, v| write_string(v, o))?;
-        optional_write(writer, self.unknown_string, |o, v| write_string(v, o))?;
+        if version == MinecraftVersion::V1_20_80 {
+            optional_write(writer, self.unknown_string, |o, v| write_string(v, o))?;
+        }
         optional_write(writer, self.custom_type_info.as_ref(), |o, v| v.write(o))?;
         Ok(())
     }
@@ -411,10 +423,16 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass<'a> {
     }
 }
 impl<'a> Pass<'a> {
-    fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
     {
+        if self.bitset.is_empty() {
+            return Err(WriteError::Compat(
+                "Bitset string is empty, Try fixing it in the main struct".to_string(),
+            ));
+        } else if version == MinecraftVersion::V1_18_30 {
+        }
         write_string(self.bitset, writer)?;
         write_string(self.fallback, writer)?;
         optional_write(writer, self.default_blendmode.as_ref(), |o, v| {
@@ -922,7 +940,7 @@ impl<'a> TryFromCtx<'a> for PropertyField<'a> {
         let has_data = read_bool(buffer, &mut offset)?;
         let mut vector_data = None;
         let mut matrix_data = None;
-        println!("field type is : {field_type:#?}");
+
         if has_data {
             match field_type {
                 PropertyType::Vec4 => {
@@ -971,7 +989,6 @@ impl<'a> PropertyField<'a> {
             PropertyType::Mat3 => {
                 writer.write_u8(self.matrix_data.is_some().into())?;
                 if let Some(data) = self.matrix_data {
-                    println!("mat3 data size : {}", data.len());
                     writer.write_all(data)?;
                 }
             }
@@ -991,9 +1008,10 @@ impl<'a> PropertyField<'a> {
 pub enum WriteError {
     #[error("String length to u16 failed")]
     IntConvert(#[from] std::num::TryFromIntError),
-
     #[error("Io error")]
     IoError(#[from] std::io::Error),
+    #[error("Compat error")]
+    Compat(String),
 }
 fn write_string<W>(string: &str, writer: &mut W) -> Result<(), WriteError>
 where
