@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use byteorder::{LittleEndian, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 use scroll::{
     ctx::{StrCtx, TryFromCtx},
@@ -16,7 +16,7 @@ use thiserror::Error;
 
 fn main() -> anyhow::Result<()> {
     let file = fs::read("RenderChunk.material.bin")?;
-    let material: CompiledMaterialDefinition = file.pread_with(0, MinecraftVersion::V1_90_60)?;
+    let material: CompiledMaterialDefinition = file.pread_with(0, MinecraftVersion::V1_19_60)?;
     //    println!("{material:#?}");
     //    println!("Material parsing result: {material:#?}");
     let mut output = File::create("RenderChunk.material.bin.rustbased")?;
@@ -25,7 +25,7 @@ fn main() -> anyhow::Result<()> {
         let file = file?;
         let data = fs::read(file.path())?;
         let material: CompiledMaterialDefinition =
-            data.pread_with(0, MinecraftVersion::V1_90_60)?;
+            data.pread_with(0, MinecraftVersion::V1_18_30)?;
         let out_path = Path::new("output/").join(file.path().file_name().unwrap());
         let mut output = File::create(out_path)?;
         let mut output = BufWriter::new(output);
@@ -37,7 +37,8 @@ fn main() -> anyhow::Result<()> {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum MinecraftVersion {
     V1_20_80,
-    V1_90_60,
+    V1_19_60,
+    V1_18_30,
 }
 impl Default for MinecraftVersion {
     fn default() -> Self {
@@ -211,7 +212,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
     type Error = scroll::Error;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        let reg = buffer.gread_with(&mut offset, LE)?;
+        let mut reg: u16 = 0;
+        if ctx == MinecraftVersion::V1_18_30 {
+            reg = buffer.gread::<u8>(&mut offset)?.into();
+        } else {
+            reg = buffer.gread_with(&mut offset, LE)?;
+        }
 
         let access: SamplerAccess = buffer.gread_with(&mut offset, ())?;
         let precision: u8 = buffer.gread_with(&mut offset, LE)?;
@@ -219,7 +225,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
         let sampler_type: SamplerType = buffer.gread_with(&mut offset, ())?;
         let texture_format = read_string(buffer, &mut offset)?;
         let unknown_int: u32 = buffer.gread_with(&mut offset, LE)?;
-        let unknown_byte: u8 = buffer.gread_with(&mut offset, LE)?;
+        let mut unknown_byte: u8 = reg
+            .try_into()
+            .map_err(|e| scroll::Error::Custom(format!("unknown byte parsing error: {e}")))?;
+        if ctx != MinecraftVersion::V1_18_30 {
+            unknown_byte = buffer.gread_with(&mut offset, LE)?;
+        }
         let mut default_texture: Option<&str> = None;
         let has_default_texture = read_bool(buffer, &mut offset)?;
         if has_default_texture {
@@ -227,7 +238,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition<'a> {
         }
 
         let mut unknown_string: Option<&str> = None;
-        if ctx != MinecraftVersion::V1_90_60 {
+        if ctx == MinecraftVersion::V1_20_80 {
             let has_unknown_string = read_bool(buffer, &mut offset)?;
             if has_unknown_string {
                 unknown_string = Some(read_string(buffer, &mut offset)?);
@@ -363,6 +374,7 @@ impl SamplerType {
         }
     }
 }
+
 #[derive(Debug)]
 struct Pass<'a> {
     bitset: &'a str,
@@ -371,11 +383,24 @@ struct Pass<'a> {
     default_flag_values: HashMap<&'a str, &'a str>,
     variants: Vec<Variant<'a>>,
 }
-impl<'a> TryFromCtx<'a> for Pass<'a> {
+impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass<'a> {
     type Error = scroll::Error;
-    fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
+    fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        let bitset = read_string(buffer, &mut offset)?;
+        let mut bitset = "";
+        if ctx == MinecraftVersion::V1_18_30 {
+            let has_bitset = buffer.gread_with::<u8>(&mut offset, LE)? == 15;
+            // rewind
+            offset -= 4;
+            if has_bitset {
+                bitset = read_string(buffer, &mut offset)?;
+            } else {
+                // skip reading byte we have no use for
+                offset += 1;
+            }
+        } else {
+            bitset = read_string(buffer, &mut offset)?;
+        }
         let fallback = read_string(buffer, &mut offset)?;
         let mut default_blendmode: Option<BlendMode> = None;
         let has_blendmode = read_bool(buffer, &mut offset)?;
