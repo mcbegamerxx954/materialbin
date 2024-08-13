@@ -1,4 +1,6 @@
-# Material updater (WIP)
-simple material updater, from 1.19.60 to 1.20.80, did not write nice cli for it yet
+# Materialbin (WIP)
+Materialbin parser and writer with multiversion capabilities
 
-parsing code ported to rust from the tool [MaterialBinTool](https://github.com/ddf8196/MaterialBinTool) made by [ddf8196](https://github.com/ddf8196)
+# Credits
++ [ddf8196](https://github.com/ddf8196) (File format of 1.18.30 - 1.20.80 materialbins)
++ [Veka](https://github.com/veka0) (File format of 1.21.20 materialbins)
