@@ -206,7 +206,7 @@ impl EncryptionVariant {
         Ok(())
     }
     fn is_encrypted(&self) -> bool {
-        self != Self::None
+        *self != Self::None
     }
 }
 
