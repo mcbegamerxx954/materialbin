@@ -1,6 +1,5 @@
 use core::slice;
 use scroll::Pread;
-use std::mem;
 
 use crate::{CompiledMaterialDefinition, ALL_VERSIONS};
 #[repr(C)]

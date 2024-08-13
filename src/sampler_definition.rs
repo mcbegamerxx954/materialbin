@@ -18,6 +18,7 @@ pub struct SamplerDefinition {
     pub texture_format: String,
     pub unknown_int: u32,
     pub unknown_byte: u8,
+    pub sampler_state: Option<u8>,
     pub unknown_optbyte: Option<u8>,
     pub default_texture: Option<String>,
     pub unknown_string: Option<String>,
@@ -45,15 +46,16 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         if ctx != MinecraftVersion::V1_18_30 {
             unknown_byte = buffer.gread_with(&mut offset, LE)?;
         }
-        let mut unknown_optbyte = None;
+        let mut sampler_state = None;
+         let mut unknown_optbyte = None;       
         if ctx == MinecraftVersion::V1_21_20 {
+            if read_bool(buffer, &mut offset)? {
+                sampler_state = Some(buffer.gread::<u8>(&mut offset)?);
+            }
             if read_bool(buffer, &mut offset)? {
                 let thing = buffer.gread::<u8>(&mut offset)?;
                 unknown_optbyte = Some(thing);
             }
-            //            if read_bool(buffer, &mut offset)? {
-            //                unknown_optbyte = Some(buffer.gread::<u8>(&mut offset)?);
-            //            }
         }
         let mut default_texture = None;
         let has_default_texture = read_bool(buffer, &mut offset)?;
@@ -84,6 +86,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
                 texture_format,
                 unknown_int,
                 unknown_byte,
+                sampler_state,
                 unknown_optbyte,
                 default_texture,
                 unknown_string,
@@ -113,7 +116,8 @@ impl SamplerDefinition {
             writer.write_u8(self.unknown_byte)?;
         }
         if version == MinecraftVersion::V1_21_20 {
-                       optional_write(writer, self.unknown_optbyte, |o, v| o.write_u8(v))?;
+            optional_write(writer, self.sampler_state, |o, v| o.write_u8(v))?;
+            optional_write(writer, self.unknown_optbyte, |o, v| o.write_u8(v))?;
         }
         optional_write(writer, self.default_texture.as_deref(), |o, v| {
             write_string(v, o)

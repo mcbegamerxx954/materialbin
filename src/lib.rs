@@ -14,6 +14,7 @@ pub mod sampler_definition;
 
 use crate::common::{optional_write, read_bool, read_string, write_string};
 pub const ALL_VERSIONS: [MinecraftVersion; 4] = [
+    // This version causes parsing issues
     MinecraftVersion::V1_18_30,
     MinecraftVersion::V1_19_60,
     MinecraftVersion::V1_20_80,
@@ -21,15 +22,15 @@ pub const ALL_VERSIONS: [MinecraftVersion; 4] = [
 ];
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MinecraftVersion {
+    V1_21_20,
     V1_20_80,
     V1_19_60,
     V1_18_30,
-    V1_21_20,
 }
 
 impl Default for MinecraftVersion {
     fn default() -> Self {
-        Self::V1_20_80
+        Self::V1_21_20
     }
 }
 impl std::fmt::Display for MinecraftVersion {
@@ -73,11 +74,10 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
         }
         let version: u64 = buffer.gread_with(&mut offset, LE)?;
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
-        if encryption_variant != EncryptionVariant::None {
-            println!("file is encrypted");
+        if encryption_variant.is_encrypted() {
             return Err(scroll::Error::BadInput {
                 size: offset,
-                msg: "Not decrypting encrypted material",
+                msg: "Encrypted files are not supported.",
             });
         }
         let name = read_string(buffer, &mut offset)?;
@@ -107,7 +107,16 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let pass: Pass = buffer.gread(&mut offset)?;
             passes.insert(name, pass);
         }
-        let _end: u64 = buffer.gread_with(&mut offset, LE)?;
+        // Just so we parse the whole thing
+        let _end: u64 = buffer.gread(&mut offset)?;
+
+        // TODO: Fix this check, would be very nice for our usage
+        // if buffer.gread::<u64>(&mut offset)? != MAGIC {
+        //     return Err(scroll::Error::BadInput {
+        //         size: offset,
+        //         msg: "Invalid magic",
+        //     });
+        // }
         Ok((
             Self {
                 version,
@@ -196,7 +205,11 @@ impl EncryptionVariant {
         output.write_u32::<byteorder::LE>(int)?;
         Ok(())
     }
+    fn is_encrypted(&self) -> bool {
+        self != Self::None
+    }
 }
+
 #[derive(Debug)]
 pub enum WriteError {
     IntConvert(std::num::TryFromIntError),
