@@ -36,7 +36,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         let access: SamplerAccess = buffer.gread_with(&mut offset, ())?;
         let precision: u8 = buffer.gread_with(&mut offset, LE)?;
         let allow_unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;
-        let sampler_type: SamplerType = buffer.gread_with(&mut offset, ())?;
+        let sampler_type: SamplerType = buffer.gread_with(&mut offset, ctx)?;
         let texture_format = read_string(buffer, &mut offset)?;
 
         let unknown_int: u32 = buffer.gread_with(&mut offset, LE)?;
@@ -47,12 +47,11 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
             unknown_byte = buffer.gread_with(&mut offset, LE)?;
         }
         let mut sampler_state = None;
-     
+
         if ctx == MinecraftVersion::V1_21_20 {
             if read_bool(buffer, &mut offset)? {
                 sampler_state = Some(buffer.gread::<u8>(&mut offset)?);
             }
-
         }
         let mut default_texture = None;
         let has_default_texture = read_bool(buffer, &mut offset)?;
@@ -106,7 +105,7 @@ impl SamplerDefinition {
         writer.write_u8(self.access.as_u8())?;
         writer.write_u8(self.precision)?;
         writer.write_u8(self.allow_unordered_access)?;
-        writer.write_u8(self.sampler_type.to_u8())?;
+        writer.write_u8(self.sampler_type.to_u8(version)?)?;
         write_string(&self.texture_format, writer)?;
         writer.write_u32::<LittleEndian>(self.unknown_int)?;
         if version != MinecraftVersion::V1_18_30 {
@@ -153,36 +152,45 @@ impl CustomTypeInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum SamplerType {
     Type2D,
     Type2DArray,
     Type2DExternal,
     Type3D,
     TypeCube,
+    TypeSamplerCubeArray,
     TypeStructuredBuffer,
     TypeRawBuffer,
     TypeAccelerationStructure,
     Type2DShadow,
     Type2DArrayShadow,
-    Aah,
 }
-impl<'a> TryFromCtx<'a> for SamplerType {
+impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerType {
     type Error = scroll::Error;
-    fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
-        let sampler_type: u8 = buffer.pread_with(0, LE)?;
+    fn try_from_ctx(
+        buffer: &'a [u8],
+        version: MinecraftVersion,
+    ) -> Result<(Self, usize), Self::Error> {
+        let mut sampler_type: u8 = buffer.pread_with(0, LE)?;
+        // On versions before 1.21.20, 5 is Structured Buffer
+        // After 1.21.20, 5 is SamplerCubeArray
+        // Adjust the difference.
+        if version != MinecraftVersion::V1_21_20 && sampler_type >= 5 {
+            sampler_type += 1;
+        }
         let enum_sub = match sampler_type {
             0 => Self::Type2D,
             1 => Self::Type2DArray,
             2 => Self::Type2DExternal,
             3 => Self::Type3D,
             4 => Self::TypeCube,
-            5 => Self::TypeStructuredBuffer,
-            6 => Self::TypeRawBuffer,
-            7 => Self::TypeAccelerationStructure,
-            8 => Self::Type2DShadow,
-            9 => Self::Type2DArrayShadow,
-            10 => Self::Aah,
+            5 => Self::TypeSamplerCubeArray,
+            6 => Self::TypeStructuredBuffer,
+            7 => Self::TypeRawBuffer,
+            8 => Self::TypeAccelerationStructure,
+            9 => Self::Type2DShadow,
+            10 => Self::Type2DArrayShadow,
             _ => {
                 return Err(scroll::Error::Custom(format!(
                     "Invalid sapmler_type: {sampler_type}"
@@ -193,20 +201,18 @@ impl<'a> TryFromCtx<'a> for SamplerType {
     }
 }
 impl SamplerType {
-    fn to_u8(&self) -> u8 {
-        match self {
-            Self::Type2D => 0,
-            Self::Type2DArray => 1,
-            Self::Type2DExternal => 2,
-            Self::Type3D => 3,
-            Self::TypeCube => 4,
-            Self::TypeStructuredBuffer => 5,
-            Self::TypeRawBuffer => 6,
-            Self::TypeAccelerationStructure => 7,
-            Self::Type2DShadow => 8,
-            Self::Type2DArrayShadow => 9,
-            Self::Aah => 10,
+    fn to_u8(self, version: MinecraftVersion) -> Result<u8, WriteError> {
+        if version != MinecraftVersion::V1_21_20 {
+            return match self {
+                Self::TypeSamplerCubeArray => Err(WriteError::Compat("Sampler type is (Sampler Cube Array) ,which is incompatible with versions before 1.21.20".to_string())),
+                Self::TypeRawBuffer => Ok(5),
+                Self::TypeAccelerationStructure => Ok(6),
+                Self::Type2DShadow => Ok(7),
+                Self::Type2DArrayShadow => Ok(8),
+                _ => Ok(self as u8),
+            };
         }
+        Ok(self as u8)
     }
 }
 #[derive(Debug)]
