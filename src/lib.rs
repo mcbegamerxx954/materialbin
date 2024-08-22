@@ -108,15 +108,13 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             passes.insert(name, pass);
         }
         // Just so we parse the whole thing
-        let _end: u64 = buffer.gread(&mut offset)?;
 
-        // TODO: Fix this check, would be very nice for our usage
-        // if buffer.gread::<u64>(&mut offset)? != MAGIC {
-        //     return Err(scroll::Error::BadInput {
-        //         size: offset,
-        //         msg: "Invalid magic",
-        //     });
-        // }
+        if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
+            return Err(scroll::Error::BadInput {
+                size: offset,
+                msg: "Invalid magic",
+            });
+        }
         Ok((
             Self {
                 version,
