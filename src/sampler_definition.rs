@@ -12,7 +12,7 @@ use crate::{
 pub struct SamplerDefinition {
     pub reg: u16,
     pub access: SamplerAccess,
-    pub precision: u8,
+    pub precision: Precision,
     pub allow_unordered_access: u8,
     pub sampler_type: SamplerType,
     pub texture_format: String,
@@ -34,7 +34,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
             buffer.gread_with(&mut offset, LE)?
         };
         let access: SamplerAccess = buffer.gread_with(&mut offset, ())?;
-        let precision: u8 = buffer.gread_with(&mut offset, LE)?;
+        let precision: Precision = buffer.gread_with(&mut offset, ())?;
         let allow_unordered_access: u8 = buffer.gread_with(&mut offset, LE)?;
         let sampler_type: SamplerType = buffer.gread_with(&mut offset, ctx)?;
         let texture_format = read_string(buffer, &mut offset)?;
@@ -103,7 +103,7 @@ impl SamplerDefinition {
             writer.write_u16::<LittleEndian>(self.reg)?;
         }
         writer.write_u8(self.access.as_u8())?;
-        writer.write_u8(self.precision)?;
+        writer.write_u8(self.precision as u8)?;
         writer.write_u8(self.allow_unordered_access)?;
         writer.write_u8(self.sampler_type.to_u8(version)?)?;
         write_string(&self.texture_format, writer)?;
@@ -221,6 +221,30 @@ pub enum SamplerAccess {
     Read,
     Write,
     ReadWrite,
+}
+#[derive(Debug, Clone, Copy)]
+pub enum Precision {
+    Low,
+    Medium,
+    High,
+}
+impl<'a> TryFromCtx<'a> for Precision {
+    type Error = scroll::Error;
+    fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
+        let precision: u8 = buffer.pread_with(0, LE)?;
+        let precision = match precision {
+            0 => Self::Low,
+            1 => Self::Medium,
+            2 => Self::High,
+            _ => {
+                return Err(scroll::Error::BadInput {
+                    size: 0,
+                    msg: "Precision of samplerdef is invalid",
+                })
+            }
+        };
+        Ok((precision, 1))
+    }
 }
 impl<'a> TryFromCtx<'a> for SamplerAccess {
     type Error = scroll::Error;
