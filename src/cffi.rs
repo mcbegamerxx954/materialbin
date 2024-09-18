@@ -14,10 +14,14 @@ struct Buffer {
 /// # Safety
 /// - Input pointer and length are valid
 /// - You free the output later
-extern "C" fn update_file(in_buffer: Buffer, out_buffer: *mut Buffer) -> libc::c_int {
-    let slice = unsafe { slice::from_raw_parts(in_buffer.data, in_buffer.len) };
+extern "C" fn update_file(
+    in_length: libc::uintptr_t,
+    in_buffer: *const u8,
+    out_buffer: *mut Buffer,
+) -> libc::c_int {
+    let slice = unsafe { slice::from_raw_parts(in_buffer, in_length) };
     let mut output = Vec::with_capacity(slice.len());
-    for version in ALL_VERSIONS {
+    for version in ALL_VERSIONS.into_iter().rev() {
         if let Ok(parsed) = slice.pread_with::<CompiledMaterialDefinition>(0, version) {
             if let Err(_) = parsed.write(&mut output, crate::MinecraftVersion::V1_21_20) {
                 continue;
