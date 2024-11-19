@@ -23,7 +23,10 @@ extern "C" fn update_file(
     let mut output = Vec::with_capacity(slice.len());
     for version in ALL_VERSIONS.into_iter().rev() {
         if let Ok(parsed) = slice.pread_with::<CompiledMaterialDefinition>(0, version) {
-            if let Err(_) = parsed.write(&mut output, crate::MinecraftVersion::V1_21_20) {
+            if parsed
+                .write(&mut output, crate::MinecraftVersion::V1_21_20)
+                .is_err()
+            {
                 continue;
             }
             let mut boxed = output.into_boxed_slice();
@@ -36,7 +39,7 @@ extern "C" fn update_file(
             return 0;
         }
     }
-    return -1;
+    -1
 }
 #[no_mangle]
 extern "C" fn free_buf(buf: Buffer) {

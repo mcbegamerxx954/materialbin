@@ -40,14 +40,13 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         let texture_format = read_string(buffer, &mut offset)?;
 
         let unknown_int: u32 = buffer.gread_with(&mut offset, LE)?;
-        let mut unknown_byte: u8 = reg
-            .try_into()
-            .map_err(|e| scroll::Error::Custom(format!("unknown byte parsing error: {e}")))?;
-        if ctx != MinecraftVersion::V1_18_30 {
-            unknown_byte = buffer.gread_with(&mut offset, LE)?;
-        }
+        let unknown_byte: u8 = if ctx != MinecraftVersion::V1_18_30 {
+            buffer.gread_with(&mut offset, LE)?
+        } else {
+            reg.try_into()
+                .map_err(|e| scroll::Error::Custom(format!("unknown byte parsing error: {e}")))?
+        };
         let mut sampler_state = None;
-
         if ctx == MinecraftVersion::V1_21_20 {
             if read_bool(buffer, &mut offset)? {
                 sampler_state = Some(buffer.gread::<u8>(&mut offset)?);
@@ -58,7 +57,6 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
         if has_default_texture {
             default_texture = Some(read_string(buffer, &mut offset)?);
         }
-
         let mut unknown_string = None;
         if ctx == MinecraftVersion::V1_20_80 || ctx == MinecraftVersion::V1_21_20 {
             let has_unknown_string = read_bool(buffer, &mut offset)?;

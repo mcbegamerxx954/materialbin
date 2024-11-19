@@ -85,8 +85,8 @@ impl Pass {
         let len = self.default_flag_values.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for (key, value) in self.default_flag_values.iter() {
-            write_string(&key, writer)?;
-            write_string(&value, writer)?;
+            write_string(key, writer)?;
+            write_string(value, writer)?;
         }
         let len = self.variants.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
@@ -143,8 +143,8 @@ impl Variant {
         let len = self.shader_codes.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for flag in self.flags.iter() {
-            write_string(&flag.0, writer)?;
-            write_string(&flag.1, writer)?;
+            write_string(flag.0, writer)?;
+            write_string(flag.1, writer)?;
         }
         for (platform_stage, code) in self.shader_codes.iter() {
             platform_stage.write(writer)?;
@@ -276,8 +276,7 @@ impl<'a> TryFromCtx<'a> for ShaderCode {
         let source_hash: u64 = buffer.gread_with(&mut offset, LE)?;
         let bsd_len: u32 = buffer.gread_with(&mut offset, LE)?;
         let bsd_size: usize = bsd_len.try_into().unwrap();
-        let bgfx_shader_data = buffer[offset..offset + bsd_size].to_vec();
-        offset += bsd_size;
+        let bgfx_shader_data = buffer.gread_with::<&[u8]>(&mut offset, bsd_size)?.to_vec();
         Ok((
             Self {
                 shader_inputs,
@@ -579,10 +578,10 @@ impl<'a> TryFromCtx<'a> for PlatformShaderStage {
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
-        let stage_name = read_string(buffer, &mut offset).unwrap();
-        let platform_name = read_string(buffer, &mut offset).unwrap();
-        let stage: ShaderStage = buffer.gread(&mut offset).unwrap();
-        let platform: ShaderCodePlatform = buffer.gread(&mut offset).unwrap();
+        let stage_name = read_string(buffer, &mut offset)?;
+        let platform_name = read_string(buffer, &mut offset)?;
+        let stage: ShaderStage = buffer.gread(&mut offset)?;
+        let platform: ShaderCodePlatform = buffer.gread(&mut offset)?;
         Ok((
             Self {
                 stage_name,
