@@ -6,13 +6,13 @@ use scroll::{
 use std::io::Write;
 
 use crate::WriteError;
-pub struct BgfxShader<'a> {
+pub struct BgfxShader {
     pub magic: u32,
     pub hash: u32,
-    pub uniforms: Vec<Uniform<'a>>,
+    pub uniforms: Vec<Uniform>,
     pub code: Vec<u8>,
 }
-impl<'a> TryFromCtx<'a> for BgfxShader<'a> {
+impl<'a> TryFromCtx<'a> for BgfxShader {
     type Error = scroll::Error;
     fn try_from_ctx(input: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
@@ -41,7 +41,7 @@ impl<'a> TryFromCtx<'a> for BgfxShader<'a> {
         ))
     }
 }
-impl<'a> BgfxShader<'a> {
+impl BgfxShader {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
@@ -58,20 +58,22 @@ impl<'a> BgfxShader<'a> {
         Ok(())
     }
 }
-pub struct Uniform<'a> {
-    pub name: &'a str,
+pub struct Uniform {
+    pub name: String,
     pub utype: u8,
     pub num: u8,
     pub reg_index: u16,
     pub reg_count: u16,
 }
 
-impl<'a> TryFromCtx<'a> for Uniform<'a> {
+impl<'a> TryFromCtx<'a> for Uniform {
     type Error = scroll::Error;
     fn try_from_ctx(input: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let str_len: u8 = input.gread(&mut offset)?;
-        let name: &str = input.gread_with(&mut offset, StrCtx::Length(str_len.into()))?;
+        let name = input
+            .gread_with::<&str>(&mut offset, StrCtx::Length(str_len.into()))?
+            .to_owned();
         let utype = input.gread(&mut offset)?;
         let num = input.gread(&mut offset)?;
         let reg_index = input.gread_with(&mut offset, LE)?;
@@ -88,7 +90,7 @@ impl<'a> TryFromCtx<'a> for Uniform<'a> {
         ))
     }
 }
-impl<'a> Uniform<'a> {
+impl Uniform {
     pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
     where
         W: Write,
