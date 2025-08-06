@@ -47,7 +47,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
                 .map_err(|e| scroll::Error::Custom(format!("unknown byte parsing error: {e}")))?
         };
         let mut sampler_state = None;
-        if ctx == MinecraftVersion::V1_21_20 {
+        if ctx >= MinecraftVersion::V1_21_20 {
             if read_bool(buffer, &mut offset)? {
                 sampler_state = Some(buffer.gread::<u8>(&mut offset)?);
             }
@@ -58,7 +58,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
             default_texture = Some(read_string(buffer, &mut offset)?);
         }
         let mut unknown_string = None;
-        if ctx == MinecraftVersion::V1_20_80 || ctx == MinecraftVersion::V1_21_20 {
+        if ctx >= MinecraftVersion::V1_20_80 {
             let has_unknown_string = read_bool(buffer, &mut offset)?;
             if has_unknown_string {
                 unknown_string = Some(read_string(buffer, &mut offset)?);
@@ -109,13 +109,13 @@ impl SamplerDefinition {
         if version != MinecraftVersion::V1_18_30 {
             writer.write_u8(self.unknown_byte)?;
         }
-        if version == MinecraftVersion::V1_21_20 {
+        if version >= MinecraftVersion::V1_21_20 {
             optional_write(writer, self.sampler_state, |o, v| o.write_u8(v))?;
         }
         optional_write(writer, self.default_texture.as_deref(), |o, v| {
             write_string(v, o)
         })?;
-        if version == MinecraftVersion::V1_20_80 || version == MinecraftVersion::V1_21_20 {
+        if version >= MinecraftVersion::V1_20_80 {
             optional_write(writer, self.unknown_string.as_deref(), |o, v| {
                 write_string(v, o)
             })?;
@@ -174,7 +174,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerType {
         // On versions before 1.21.20, 5 is Structured Buffer
         // After 1.21.20, 5 is SamplerCubeArray
         // Adjust the difference.
-        if version != MinecraftVersion::V1_21_20 && sampler_type >= 5 {
+        if version < MinecraftVersion::V1_21_20 && sampler_type >= 5 {
             sampler_type += 1;
         }
         let enum_sub = match sampler_type {
@@ -200,7 +200,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerType {
 }
 impl SamplerType {
     fn to_u8(self, version: MinecraftVersion) -> Result<u8, WriteError> {
-        if version != MinecraftVersion::V1_21_20 {
+        if version < MinecraftVersion::V1_21_20 {
             return match self {
                 Self::TypeSamplerCubeArray => Err(WriteError::Compat("Sampler type is (Sampler Cube Array) ,which is incompatible with versions before 1.21.20".to_string())),
                 Self::TypeRawBuffer => Ok(5),

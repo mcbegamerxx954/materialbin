@@ -4,7 +4,7 @@ use pass::Pass;
 use property_field::PropertyField;
 use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
-use std::io::Write;
+use std::{cmp::Ordering, io::Write};
 pub mod bgfx_shader;
 mod cffi;
 mod common;
@@ -13,19 +13,21 @@ pub mod property_field;
 pub mod sampler_definition;
 
 use crate::common::{optional_write, read_bool, read_string, write_string};
-pub const ALL_VERSIONS: [MinecraftVersion; 4] = [
+pub const ALL_VERSIONS: [MinecraftVersion; 5] = [
     // This version causes parsing issues
     MinecraftVersion::V1_18_30,
     MinecraftVersion::V1_19_60,
     MinecraftVersion::V1_20_80,
     MinecraftVersion::V1_21_20,
+    MinecraftVersion::V1_21_110,
 ];
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub enum MinecraftVersion {
+    V1_18_30,
+    V1_19_60,
     V1_21_20,
     V1_20_80,
-    V1_19_60,
-    V1_18_30,
+    V1_21_110,
 }
 
 impl Default for MinecraftVersion {
@@ -40,6 +42,7 @@ impl std::fmt::Display for MinecraftVersion {
             Self::V1_19_60 => write!(f, "1.19.60"),
             Self::V1_18_30 => write!(f, "1.18.30"),
             Self::V1_21_20 => write!(f, "1.21.20"),
+            Self::V1_21_110 => write!(f, "1.21.110"),
         }
     }
 }
@@ -100,6 +103,15 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
+        if ctx == MinecraftVersion::V1_21_110 {
+            if name != "Core/Builtins" {
+                let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
+                for _ in 0..builtin_count {
+                    let _key = read_string(buffer, &mut offset)?;
+                    let _value = read_string(buffer, &mut offset)?;
+                }
+            }
+        }
         let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut passes = IndexMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
@@ -108,13 +120,18 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             passes.insert(name, pass);
         }
         // Just so we parse the whole thing
-
         if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Invalid magic",
             });
         }
+        // if offset != buffer.len() - 1 {
+        //     return Err(scroll::Error::BadInput {
+        //         size: offset,
+        //         msg: "Tragic news",
+        //     });
+        // }
         Ok((
             Self {
                 version,
@@ -154,6 +171,9 @@ impl CompiledMaterialDefinition {
         for (name, property_field) in self.property_fields.iter() {
             write_string(name, writer)?;
             property_field.write(writer)?;
+        }
+        if version == MinecraftVersion::V1_21_110 && self.name != "Core/Builtins" {
+            writer.write_u16::<LittleEndian>(0)?;
         }
         let len = self.passes.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
