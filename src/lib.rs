@@ -6,6 +6,7 @@ use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
 use std::{cmp::Ordering, io::Write};
 pub mod bgfx_shader;
+#[cfg(feature = "ffi")]
 mod cffi;
 mod common;
 pub mod pass;

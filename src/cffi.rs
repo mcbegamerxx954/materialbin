@@ -15,7 +15,7 @@ struct Buffer {
 /// - Input pointer and length are valid
 /// - You free the output later
 extern "C" fn update_file(
-    in_length: libc::uintptr_t,
+    in_length: usize,
     in_buffer: *const u8,
     out_buffer: *mut Buffer,
 ) -> libc::c_int {
