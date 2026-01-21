@@ -64,7 +64,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         const MAGIC: u64 = 0xA11DA1A;
-        if buffer.gread::<u64>(&mut offset)? != MAGIC {
+        if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Invalid magic",

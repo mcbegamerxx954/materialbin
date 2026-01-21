@@ -16,7 +16,7 @@ impl<'a> TryFromCtx<'a> for PropertyField {
         let mut offset = 0;
 
         let field_type: PropertyType = buffer.gread(&mut offset)?;
-        let num: u32 = buffer.gread(&mut offset)?;
+        let num: u32 = buffer.gread_with(&mut offset, scroll::LE)?;
         let has_data = read_bool(buffer, &mut offset)?;
         let mut vector_data = None;
         let mut matrix_data = None;
