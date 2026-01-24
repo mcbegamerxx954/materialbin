@@ -203,9 +203,10 @@ impl<'a> TryFromCtx<'a> for EncryptionVariant {
             0x534D504C_u32 => Self::SimplePassphrase,
             0x4B595052_u32 => Self::KeyPair,
             _ => {
-                return Err(scroll::Error::Custom(format!(
-                    "Invalid EnctyptionVariant: {encryption}"
-                )))
+                return Err(scroll::Error::BadInput {
+                    size: 0,
+                    msg: "Invalid EncryptionVariant: {encryption}",
+                });
             }
         };
         Ok((enum_type, offset))

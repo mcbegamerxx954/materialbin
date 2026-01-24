@@ -11,33 +11,45 @@ pub struct BgfxShader {
     pub hash: u32,
     pub uniforms: Vec<Uniform>,
     pub code: Vec<u8>,
+    pub attributes: Option<Vec<u16>>,
+    pub size: Option<u16>,
 }
 impl<'a> TryFromCtx<'a> for BgfxShader {
     type Error = scroll::Error;
     fn try_from_ctx(input: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
-        let mut offset = 0;
-        let magic = input.gread_with(&mut offset, LE)?;
-        let hash = input.gread_with(&mut offset, LE)?;
-        let uniform_count: u16 = input.gread_with(&mut offset, LE)?;
+        let offset = &mut 0;
+        let magic = input.gread_with(offset, LE)?;
+        let hash = input.gread_with(offset, LE)?;
+        let uniform_count: u16 = input.gread_with(offset, LE)?;
         let uniforms: Vec<Uniform> = (0..uniform_count)
-            .flat_map(|_| input.gread(&mut offset))
+            .flat_map(|_| input.gread(offset))
             .collect();
-        let code_len: u32 = input.gread_with(&mut offset, LE)?;
+        let code_len: u32 = input.gread_with(offset, LE)?;
         let code_len: usize = code_len.try_into().map_err(|e| {
             scroll::Error::Custom(format!(
                 "Code len: {code_len} does not fit in usize, error: {e}"
             ))
         })?;
-        let code = input.gread_with::<&[u8]>(&mut offset, code_len)?.to_vec();
-        let _dumbbyte: u8 = input.gread(&mut offset)?;
+        let code = input.gread_with::<&[u8]>(offset, code_len)?.to_vec();
+        let _dumbbyte: u8 = input.gread(offset)?;
+        let attr_count: u8 = input.gread(offset)?;
+        let mut attributes = None;
+        let mut size = None;
+        if attr_count != 0 {
+            // let _: u16 = input.gread(offset)?;
+            attributes = Some((0..attr_count).flat_map(|_| input.gread(offset)).collect());
+            size = Some(input.gread(offset)?);
+        }
         Ok((
             Self {
                 magic,
                 hash,
                 uniforms,
                 code,
+                attributes,
+                size,
             },
-            offset,
+            *offset,
         ))
     }
 }
@@ -55,6 +67,15 @@ impl BgfxShader {
         writer.write_u32::<LittleEndian>(self.code.len().try_into()?)?;
         writer.write_all(&self.code)?;
         writer.write_u8(0)?;
+        if let Some(attrs) = &self.attributes {
+            writer.write_u8(attrs.len() as u8)?;
+            for attr in attrs {
+                writer.write_u16::<LittleEndian>(*attr)?;
+            }
+            if let Some(size) = &self.size {
+                writer.write_u16::<LittleEndian>(*size)?;
+            }
+        }
         Ok(())
     }
 }
