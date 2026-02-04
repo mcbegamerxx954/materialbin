@@ -14,13 +14,14 @@ pub mod property_field;
 pub mod sampler_definition;
 
 use crate::common::{optional_write, read_bool, read_string, write_string};
-pub const ALL_VERSIONS: [MinecraftVersion; 5] = [
+pub const ALL_VERSIONS: [MinecraftVersion; 6] = [
     // This version causes parsing issues
     MinecraftVersion::V1_18_30,
     MinecraftVersion::V1_19_60,
     MinecraftVersion::V1_20_80,
     MinecraftVersion::V1_21_20,
     MinecraftVersion::V1_21_110,
+    MinecraftVersion::V26_0_24,
 ];
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
 pub enum MinecraftVersion {
@@ -29,6 +30,7 @@ pub enum MinecraftVersion {
     V1_21_20,
     V1_20_80,
     V1_21_110,
+    V26_0_24,
 }
 
 impl Default for MinecraftVersion {
@@ -44,6 +46,7 @@ impl std::fmt::Display for MinecraftVersion {
             Self::V1_18_30 => write!(f, "1.18.30"),
             Self::V1_21_20 => write!(f, "1.21.20"),
             Self::V1_21_110 => write!(f, "1.21.110"),
+            Self::V26_0_24 => write!(f, "26.0.24"),
         }
     }
 }

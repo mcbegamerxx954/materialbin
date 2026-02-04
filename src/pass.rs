@@ -49,7 +49,10 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             let value = read_string(buffer, &mut offset)?;
             default_flag_values.insert(key, value);
         }
-
+        //TODO: Add proper support
+        if ctx >= MinecraftVersion::V26_0_24 {
+            offset += size_of::<u32>();
+        }
         let variant_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let variants: Vec<Variant> = (0..variant_count)
             .flat_map(|_| buffer.gread(&mut offset))
@@ -87,6 +90,9 @@ impl Pass {
         for (key, value) in self.default_flag_values.iter() {
             write_string(key, writer)?;
             write_string(value, writer)?;
+        }
+        if version >= MinecraftVersion::V26_0_24 {
+            writer.write_u32::<LittleEndian>(0)?;
         }
         let len = self.variants.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
@@ -172,6 +178,7 @@ pub enum BlendMode {
 }
 impl<'a> TryFromCtx<'a> for BlendMode {
     type Error = scroll::Error;
+    #[inline(never)]
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u16 = buffer.pread_with(0, LE)?;
         let enum_type = match int {
@@ -232,6 +239,7 @@ pub enum ShaderCodePlatform {
 
 impl<'a> TryFromCtx<'a> for ShaderCodePlatform {
     type Error = scroll::Error;
+    #[inline(never)]
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
         let enum_type = match int {
@@ -250,7 +258,12 @@ impl<'a> TryFromCtx<'a> for ShaderCodePlatform {
             12 => Self::Vulkan,
             13 => Self::Nvn,
             14 => Self::Pssl,
-            _ => return Err(scroll::Error::Custom(format!("Invalid ShaderCodePlatform"))),
+            _ => {
+                return Err(scroll::Error::BadInput {
+                    size: 0,
+                    msg: "Invalid ShaderCodePlatform",
+                })
+            }
         };
         Ok((enum_type, 1))
     }
