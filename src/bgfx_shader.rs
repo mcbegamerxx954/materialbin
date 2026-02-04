@@ -67,15 +67,15 @@ impl BgfxShader {
         writer.write_u32::<LittleEndian>(self.code.len().try_into()?)?;
         writer.write_all(&self.code)?;
         writer.write_u8(0)?;
-        if let Some(attrs) = &self.attributes {
-            writer.write_u8(attrs.len() as u8)?;
-            for attr in attrs {
-                writer.write_u16::<LittleEndian>(*attr)?;
-            }
-            if let Some(size) = &self.size {
-                writer.write_u16::<LittleEndian>(*size)?;
-            }
-        }
+        // if let Some(attrs) = &self.attributes {
+        //     writer.write_u8(attrs.len() as u8)?;
+        //     for attr in attrs {
+        //         writer.write_u16::<LittleEndian>(*attr)?;
+        //     }
+        //     if let Some(size) = &self.size {
+        //         writer.write_u16::<LittleEndian>(*size)?;
+        //     }
+        // }
         Ok(())
     }
 }
