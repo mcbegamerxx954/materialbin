@@ -11,8 +11,8 @@ pub struct BgfxShader {
     pub hash: u32,
     pub uniforms: Vec<Uniform>,
     pub code: Vec<u8>,
-    //    pub attributes: Option<Vec<u16>>,
-    //    pub size: Option<u16>,
+    pub attributes: Option<Vec<u16>>,
+    pub size: Option<u16>,
 }
 impl<'a> TryFromCtx<'a> for BgfxShader {
     type Error = scroll::Error;
@@ -32,22 +32,22 @@ impl<'a> TryFromCtx<'a> for BgfxShader {
         })?;
         let code = input.gread_with::<&[u8]>(offset, code_len)?.to_vec();
         let _dumbbyte: u8 = input.gread(offset)?;
-        // let attr_count: u8 = input.gread(offset)?;
-        // let mut attributes = None;
-        // let mut size = None;
-        // if attr_count != 0 {
-        //     // let _: u16 = input.gread(offset)?;
-        //     attributes = Some((0..attr_count).flat_map(|_| input.gread(offset)).collect());
-        //     size = Some(input.gread(offset)?);
-        // }
+        let attr_count: u8 = input.gread(offset)?;
+        let mut attributes = None;
+        let mut size = None;
+        if attr_count != 0 {
+            // let _: u16 = input.gread(offset)?;
+            attributes = Some((0..attr_count).flat_map(|_| input.gread(offset)).collect());
+            size = Some(input.gread(offset)?);
+        }
         Ok((
             Self {
                 magic,
                 hash,
                 uniforms,
                 code,
-                // attributes,
-                // size,
+                attributes,
+                size,
             },
             *offset,
         ))
@@ -67,15 +67,15 @@ impl BgfxShader {
         writer.write_u32::<LittleEndian>(self.code.len().try_into()?)?;
         writer.write_all(&self.code)?;
         writer.write_u8(0)?;
-        // if let Some(attrs) = &self.attributes {
-        //     writer.write_u8(attrs.len() as u8)?;
-        //     for attr in attrs {
-        //         writer.write_u16::<LittleEndian>(*attr)?;
-        //     }
-        //     if let Some(size) = &self.size {
-        //         writer.write_u16::<LittleEndian>(*size)?;
-        //     }
-        // }
+        if let Some(attrs) = &self.attributes {
+            writer.write_u8(attrs.len() as u8)?;
+            for attr in attrs {
+                writer.write_u16::<LittleEndian>(*attr)?;
+            }
+            if let Some(size) = &self.size {
+                writer.write_u16::<LittleEndian>(*size)?;
+            }
+        }
         Ok(())
     }
 }
