@@ -32,13 +32,15 @@ impl<'a> TryFromCtx<'a> for BgfxShader {
         })?;
         let code = input.gread_with::<&[u8]>(offset, code_len)?.to_vec();
         let _dumbbyte: u8 = input.gread(offset)?;
-        let attr_count: u8 = input.gread(offset)?;
+
         let mut attributes = None;
         let mut size = None;
-        if attr_count != 0 {
-            // let _: u16 = input.gread(offset)?;
-            attributes = Some((0..attr_count).flat_map(|_| input.gread(offset)).collect());
-            size = Some(input.gread(offset)?);
+        if let Ok(attr_count) = input.gread::<u8>(offset) {
+            if attr_count != 0 {
+                // let _: u16 = input.gread(offset)?;
+                attributes = Some((0..attr_count).flat_map(|_| input.gread(offset)).collect());
+                size = Some(input.gread(offset)?);
+            }
         }
         Ok((
             Self {
