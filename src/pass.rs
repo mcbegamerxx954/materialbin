@@ -15,6 +15,7 @@ pub struct Pass {
     pub fallback: String,
     pub default_blendmode: Option<BlendMode>,
     pub default_flag_values: IndexMap<String, String>,
+    pub framebuffer_binding: Option<u32>,
     pub variants: Vec<Variant>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
@@ -49,9 +50,9 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             let value = read_string(buffer, &mut offset)?;
             default_flag_values.insert(key, value);
         }
-        //TODO: Add proper support
+        let mut framebuffer_binding = None;
         if ctx >= MinecraftVersion::V26_0_24 {
-            offset += size_of::<u32>();
+            framebuffer_binding = Some(buffer.gread_with(&mut offset, LE)?);
         }
         let variant_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let variants: Vec<Variant> = (0..variant_count)
@@ -63,6 +64,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
                 fallback,
                 default_blendmode,
                 default_flag_values,
+                framebuffer_binding,
                 variants,
             },
             offset,
@@ -92,7 +94,9 @@ impl Pass {
             write_string(value, writer)?;
         }
         if version >= MinecraftVersion::V26_0_24 {
-            writer.write_u32::<LittleEndian>(0)?;
+            if let Some(fb_binding) = self.framebuffer_binding {
+                writer.write_u32::<LittleEndian>(fb_binding)?;
+            }
         }
         let len = self.variants.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
