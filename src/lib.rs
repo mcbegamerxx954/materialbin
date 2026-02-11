@@ -107,7 +107,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
-        if ctx == MinecraftVersion::V1_21_110 {
+        if ctx >= MinecraftVersion::V1_21_110 {
             if name != "Core/Builtins" {
                 let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
                 for _ in 0..builtin_count {
@@ -176,7 +176,7 @@ impl CompiledMaterialDefinition {
             write_string(name, writer)?;
             property_field.write(writer)?;
         }
-        if version == MinecraftVersion::V1_21_110 && self.name != "Core/Builtins" {
+        if version >= MinecraftVersion::V1_21_110 && self.name != "Core/Builtins" {
             writer.write_u16::<LittleEndian>(0)?;
         }
         let len = self.passes.len().try_into()?;
