@@ -70,7 +70,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
         if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
             return Err(scroll::Error::BadInput {
                 size: offset,
-                msg: "Invalid magic",
+                msg: "Invalid starting magic",
             });
         }
         if read_string(buffer, &mut offset)? != "RenderDragon.CompiledMaterialDefinition" {
@@ -127,7 +127,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
         if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
             return Err(scroll::Error::BadInput {
                 size: offset,
-                msg: "Invalid magic",
+                msg: "Invalid ending magic",
             });
         }
         // if offset != buffer.len() - 1 {
