@@ -38,7 +38,9 @@ impl<'a> TryFromCtx<'a> for BgfxShader {
         if let Ok(attr_count) = input.gread::<u8>(offset) {
             if attr_count != 0 {
                 // let _: u16 = input.gread(offset)?;
-                attributes = Some((0..attr_count).flat_map(|_| input.gread(offset)).collect());
+                let parsed: Result<Vec<u16>, scroll::Error> =
+                    (0..attr_count).map(|_| input.gread(offset)).collect();
+                attributes = Some(parsed?);
                 size = Some(input.gread(offset)?);
             }
         }

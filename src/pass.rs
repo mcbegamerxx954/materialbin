@@ -55,8 +55,8 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             framebuffer_binding = Some(buffer.gread_with(&mut offset, LE)?);
         }
         let variant_count: u16 = buffer.gread_with(&mut offset, LE)?;
-        let variants: Vec<Variant> = (0..variant_count)
-            .flat_map(|_| buffer.gread(&mut offset))
+        let variants: Result<Vec<Variant>, scroll::Error> = (0..variant_count)
+            .map(|_| buffer.gread(&mut offset))
             .collect();
         Ok((
             Self {
@@ -65,7 +65,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
                 default_blendmode,
                 default_flag_values,
                 framebuffer_binding,
-                variants,
+                variants: variants?,
             },
             offset,
         ))
