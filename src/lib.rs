@@ -80,6 +80,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             });
         }
         let version: u64 = buffer.gread_with(&mut offset, LE)?;
+        if version == 23 && ctx != MinecraftVersion::V26_0_24 {
+            return Err(scroll::Error::BadInput {
+                size: offset,
+                msg: "Wrong material bin version",
+            });
+        }
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
         if encryption_variant.is_encrypted() {
             return Err(scroll::Error::BadInput {
@@ -158,7 +164,11 @@ impl CompiledMaterialDefinition {
         const MAGIC: u64 = 0xA11DA1A;
         writer.write_u64::<LittleEndian>(MAGIC)?;
         write_string("RenderDragon.CompiledMaterialDefinition", writer)?;
-        writer.write_u64::<LittleEndian>(self.version)?;
+        if version == MinecraftVersion::V26_0_24 {
+            writer.write_u64::<LittleEndian>(23);
+        } else {
+            writer.write_u64::<LittleEndian>(self.version)?;
+        }
         self.encryption_variant.write(writer)?;
         write_string(&self.name, writer)?;
         optional_write(writer, self.parent_name.as_deref(), |o, v| {
