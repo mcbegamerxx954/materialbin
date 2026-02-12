@@ -6,7 +6,7 @@ use scroll::{ctx::TryFromCtx, Pread, LE};
 
 use crate::{
     common::{optional_write, read_bool, read_string, write_string},
-    MinecraftVersion, WriteError,
+    option_read, MinecraftVersion, WriteError,
 };
 
 #[derive(Debug)]
@@ -37,11 +37,12 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             read_string(buffer, &mut offset)?
         };
         let fallback = read_string(buffer, &mut offset)?;
-        let mut default_blendmode: Option<BlendMode> = None;
-        let has_blendmode = read_bool(buffer, &mut offset)?;
-        if has_blendmode {
-            default_blendmode = Some(buffer.gread_with(&mut offset, ())?);
-        }
+        let default_blendmode: Option<BlendMode> =
+            option_read!(&mut offset, buffer, buffer.gread(&mut offset)?);
+        // let has_blendmode = read_bool(buffer, &mut offset)?;
+        // if has_blendmode {
+        //     default_blendmode = Some(buffer.gread_with(&mut offset, ())?);
+        // }
 
         let flag_dvalue_count: u16 = buffer.gread_with(&mut offset, LE)?;
         let mut default_flag_values = IndexMap::with_capacity(flag_dvalue_count.into());
@@ -96,6 +97,8 @@ impl Pass {
         if version >= MinecraftVersion::V26_0_24 {
             if let Some(fb_binding) = self.framebuffer_binding {
                 writer.write_u32::<LittleEndian>(fb_binding)?;
+            } else {
+                writer.write_u32::<LittleEndian>(0)?;
             }
         }
         let len = self.variants.len().try_into()?;

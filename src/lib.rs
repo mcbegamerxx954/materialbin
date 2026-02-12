@@ -4,7 +4,7 @@ use pass::Pass;
 use property_field::PropertyField;
 use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
-use std::{cmp::Ordering, io::Write};
+use std::{cmp::Ordering, convert::identity, io::Write};
 pub mod bgfx_shader;
 #[cfg(feature = "ffi")]
 mod cffi;
@@ -23,21 +23,17 @@ pub const ALL_VERSIONS: [MinecraftVersion; 6] = [
     MinecraftVersion::V1_21_110,
     MinecraftVersion::V26_0_24,
 ];
-#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Default)]
 pub enum MinecraftVersion {
     V1_18_30,
     V1_19_60,
     V1_21_20,
     V1_20_80,
     V1_21_110,
+    #[default]
     V26_0_24,
 }
 
-impl Default for MinecraftVersion {
-    fn default() -> Self {
-        Self::V1_21_20
-    }
-}
 impl std::fmt::Display for MinecraftVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -59,6 +55,7 @@ pub struct CompiledMaterialDefinition {
     pub parent_name: Option<String>,
     pub sampler_definitions: IndexMap<String, SamplerDefinition>,
     pub property_fields: IndexMap<String, PropertyField>,
+    pub uniform_overrides: Option<IndexMap<String, String>>,
     pub passes: IndexMap<String, Pass>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
@@ -113,13 +110,17 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             let property_field: PropertyField = buffer.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
+        let mut uniform_overrides = None;
         if ctx >= MinecraftVersion::V1_21_110 {
             if name != "Core/Builtins" {
+                let mut indexmap = IndexMap::new();
                 let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
                 for _ in 0..builtin_count {
-                    let _key = read_string(buffer, &mut offset)?;
-                    let _value = read_string(buffer, &mut offset)?;
+                    let key = read_string(buffer, &mut offset)?;
+                    let value = read_string(buffer, &mut offset)?;
+                    indexmap.insert(key, value);
                 }
+                uniform_overrides = Some(indexmap);
             }
         }
         let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
@@ -150,6 +151,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
                 parent_name,
                 sampler_definitions,
                 property_fields,
+                uniform_overrides,
                 passes,
             },
             offset,
@@ -165,7 +167,7 @@ impl CompiledMaterialDefinition {
         writer.write_u64::<LittleEndian>(MAGIC)?;
         write_string("RenderDragon.CompiledMaterialDefinition", writer)?;
         if version == MinecraftVersion::V26_0_24 {
-            writer.write_u64::<LittleEndian>(23);
+            writer.write_u64::<LittleEndian>(23)?;
         } else {
             writer.write_u64::<LittleEndian>(self.version)?;
         }
@@ -187,7 +189,16 @@ impl CompiledMaterialDefinition {
             property_field.write(writer)?;
         }
         if version >= MinecraftVersion::V1_21_110 && self.name != "Core/Builtins" {
-            writer.write_u16::<LittleEndian>(0)?;
+            match &self.uniform_overrides {
+                Some(overrides) => {
+                    writer.write_u16::<LittleEndian>(overrides.len().try_into()?)?;
+                    for (key, value) in overrides {
+                        write_string(key, writer)?;
+                        write_string(value, writer)?;
+                    }
+                }
+                None => writer.write_u16::<LittleEndian>(0)?,
+            }
         }
         let len = self.passes.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
@@ -268,4 +279,15 @@ impl std::fmt::Display for WriteError {
             Self::Compat(info) => write!(f, "Compat error: {info}"),
         }
     }
+}
+#[macro_export]
+macro_rules! option_read {
+    ($buf:expr, $offset:expr, $func:expr) => {
+        // let should_read = crate::common::read_bool($offset, $buf);
+        if crate::common::read_bool($offset, $buf)? {
+            Some($func)
+        } else {
+            None
+        }
+    };
 }
