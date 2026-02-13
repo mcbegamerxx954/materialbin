@@ -29,8 +29,10 @@ pub const ALL_VERSIONS: [MinecraftVersion; 6] = [
 pub enum MinecraftVersion {
     V1_18_30,
     V1_19_60,
-    V1_21_20,
+
     V1_20_80,
+
+    V1_21_20,
     V1_21_110,
     #[default]
     V26_0_24,
@@ -173,11 +175,13 @@ impl CompiledMaterialDefinition {
         const MAGIC: u64 = 0xA11DA1A;
         writer.write_u64::<LittleEndian>(MAGIC)?;
         write_string("RenderDragon.CompiledMaterialDefinition", writer)?;
-        if version == MinecraftVersion::V26_0_24 {
-            writer.write_u64::<LittleEndian>(23)?;
-        } else {
-            writer.write_u64::<LittleEndian>(22)?;
-        }
+        let ver: u64 = match version {
+            v if v <= MinecraftVersion::V1_21_110 => 22,
+            MinecraftVersion::V26_0_24 => 23,
+            // MinecraftVersion::V26_10_20 => 25,
+            _ => self.version,
+        };
+        writer.write_u64::<LittleEndian>(ver)?;
         self.encryption_variant.write(writer)?;
         write_string(&self.name, writer)?;
         optional_write(writer, self.parent_name.as_deref(), |o, v| {
