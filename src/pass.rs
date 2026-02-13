@@ -246,40 +246,73 @@ pub enum ShaderCodePlatform {
     Nvn,          //?
     Pssl,         //?
 }
-const PLATFORMS: [ShaderCodePlatform; 16] = [
-    ShaderCodePlatform::Direct3DSm40,
-    ShaderCodePlatform::Direct3DSm50,
-    ShaderCodePlatform::Direct3DSm60,
-    ShaderCodePlatform::Direct3DSm65,
-    ShaderCodePlatform::Direct3DXB1,
-    ShaderCodePlatform::Direct3DXBX,
-    ShaderCodePlatform::Glsl120,
-    ShaderCodePlatform::Glsl120,
-    ShaderCodePlatform::Glsl430,
-    ShaderCodePlatform::Essl100,
-    ShaderCodePlatform::Essl300,
-    ShaderCodePlatform::Essl310,
-    ShaderCodePlatform::Metal,
-    ShaderCodePlatform::Vulkan,
-    ShaderCodePlatform::Nvn,
-    ShaderCodePlatform::Pssl,
-];
+// const PLATFORMS: [ShaderCodePlatform; 16] = [
+//     ShaderCodePlatform::Direct3DSm40,
+//     ShaderCodePlatform::Direct3DSm50,
+//     ShaderCodePlatform::Direct3DSm60,
+//     ShaderCodePlatform::Direct3DSm65,
+//     ShaderCodePlatform::Direct3DXB1,
+//     ShaderCodePlatform::Direct3DXBX,
+//     ShaderCodePlatform::Glsl120,
+//     ShaderCodePlatform::Glsl120,
+//     ShaderCodePlatform::Glsl430,
+//     ShaderCodePlatform::Essl100,
+//     ShaderCodePlatform::Essl300,
+//     ShaderCodePlatform::Essl310,
+//     ShaderCodePlatform::Metal,
+//     ShaderCodePlatform::Vulkan,
+//     ShaderCodePlatform::Nvn,
+//     ShaderCodePlatform::Pssl,
+// ];
+// impl<'a> TryFromCtx<'a, MinecraftVersion> for ShaderCodePlatform {
+//     type Error = MyError;
+//     #[inline(never)]
+//     fn try_from_ctx(
+//         buffer: &'a [u8],
+//         version: MinecraftVersion,
+//     ) -> Result<(Self, usize), Self::Error> {
+//         let int: u8 = buffer.pread_with(0, LE)?;
+//         let mut version_list = PLATFORMS
+//             .into_iter()
+//             .filter(|v| version < MinecraftVersion::V1_21_20 && *v != ShaderCodePlatform::Essl100);
+//         // .filter(|p| version < MinecraftVersion::V26_0_24 && *p != ShaderCodePlatform::Essl300);
+
+//         let enum_type = match version_list.nth(int.into()) {
+//             Some(yay) => yay,
+//             None => {
+//                 return Err(scroll::Error::BadInput {
+//                     size: 0,
+//                     msg: "Invalid ShaderCodePlatform",
+//                 }
+//                 .into())
+//             }
+//         };
+//         Ok((enum_type, 1))
+//     }
+// }
+//
 impl<'a> TryFromCtx<'a, MinecraftVersion> for ShaderCodePlatform {
     type Error = MyError;
     #[inline(never)]
-    fn try_from_ctx(
-        buffer: &'a [u8],
-        version: MinecraftVersion,
-    ) -> Result<(Self, usize), Self::Error> {
+    fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
-        let mut version_list = PLATFORMS
-            .into_iter()
-            .filter(|v| version < MinecraftVersion::V1_21_20 && *v != ShaderCodePlatform::Essl100);
-        // .filter(|p| version < MinecraftVersion::V26_0_24 && *p != ShaderCodePlatform::Essl300);
-
-        let enum_type = match version_list.nth(int.into()) {
-            Some(yay) => yay,
-            None => {
+        let enum_type = match int {
+            0 => Self::Direct3DSm40,
+            1 => Self::Direct3DSm50,
+            2 => Self::Direct3DSm60,
+            3 => Self::Direct3DSm65,
+            4 => Self::Direct3DXB1,
+            5 => Self::Direct3DXBX,
+            6 => Self::Glsl120,
+            7 => Self::Glsl430,
+            8 => Self::Essl100,
+            9 => Self::Essl300,
+            10 => Self::Essl310,
+            11 => Self::Metal,
+            12 => Self::Vulkan,
+            13 => Self::Nvn,
+            14 => Self::Pssl,
+            _ => {
                 return Err(scroll::Error::BadInput {
                     size: 0,
                     msg: "Invalid ShaderCodePlatform",
