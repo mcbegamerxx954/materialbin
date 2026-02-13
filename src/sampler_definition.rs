@@ -5,7 +5,7 @@ use scroll::{ctx::TryFromCtx, Pread, LE};
 
 use crate::{
     common::{optional_write, read_bool, read_string, write_string},
-    MinecraftVersion, WriteError,
+    MinecraftVersion, MyError, WriteError,
 };
 
 #[derive(Debug)]
@@ -25,7 +25,7 @@ pub struct SamplerDefinition {
     pub custom_type_info: Option<CustomTypeInfo>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerDefinition {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let reg: u16 = if ctx == MinecraftVersion::V1_18_30 {
@@ -131,7 +131,7 @@ pub struct CustomTypeInfo {
     pub size: u32,
 }
 impl<'a> TryFromCtx<'a> for CustomTypeInfo {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let name = read_string(buffer, &mut offset)?;
@@ -165,7 +165,7 @@ pub enum SamplerType {
     Type2DArrayShadow,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerType {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(
         buffer: &'a [u8],
         version: MinecraftVersion,
@@ -190,9 +190,9 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for SamplerType {
             9 => Self::Type2DShadow,
             10 => Self::Type2DArrayShadow,
             _ => {
-                return Err(scroll::Error::Custom(format!(
-                    "Invalid sapmler_type: {sampler_type}"
-                )))
+                return Err(
+                    scroll::Error::Custom(format!("Invalid sapmler_type: {sampler_type}")).into(),
+                )
             }
         };
         Ok((enum_sub, 1))
@@ -227,7 +227,7 @@ pub enum Precision {
     High,
 }
 impl<'a> TryFromCtx<'a> for Precision {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let precision: u8 = buffer.pread_with(0, LE)?;
         let precision = match precision {
@@ -238,14 +238,15 @@ impl<'a> TryFromCtx<'a> for Precision {
                 return Err(scroll::Error::BadInput {
                     size: 0,
                     msg: "Precision of samplerdef is invalid",
-                })
+                }
+                .into())
             }
         };
         Ok((precision, 1))
     }
 }
 impl<'a> TryFromCtx<'a> for SamplerAccess {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let access: u8 = buffer.pread_with(0, LE)?;
         match access {
@@ -253,9 +254,7 @@ impl<'a> TryFromCtx<'a> for SamplerAccess {
             1 => Ok((Self::Read, 1)),
             2 => Ok((Self::Write, 1)),
             3 => Ok((Self::ReadWrite, 1)),
-            _ => Err(scroll::Error::Custom(
-                "Sampler Access is not valid".to_owned(),
-            )),
+            _ => Err(scroll::Error::Custom("Sampler Access is not valid".to_owned()).into()),
         }
     }
 }

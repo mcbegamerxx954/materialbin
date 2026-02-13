@@ -1,14 +1,14 @@
-use std::io::Write;
+use std::{fmt::Display, io::Write};
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use indexmap::IndexMap;
 use scroll::{ctx::TryFromCtx, Pread, LE};
 
+use crate::MyError;
 use crate::{
     common::{optional_write, read_bool, read_string, write_string},
     option_read, MinecraftVersion, WriteError,
 };
-
 #[derive(Debug)]
 pub struct Pass {
     pub bitset: String,
@@ -19,7 +19,7 @@ pub struct Pass {
     pub variants: Vec<Variant>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let bitset = if ctx == MinecraftVersion::V1_18_30 {
@@ -56,8 +56,8 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for Pass {
             framebuffer_binding = Some(buffer.gread_with(&mut offset, LE)?);
         }
         let variant_count: u16 = buffer.gread_with(&mut offset, LE)?;
-        let variants: Result<Vec<Variant>, scroll::Error> = (0..variant_count)
-            .map(|_| buffer.gread(&mut offset))
+        let variants: Result<Vec<Variant>, MyError> = (0..variant_count)
+            .map(|_| buffer.gread_with(&mut offset, ctx))
             .collect();
         Ok((
             Self {
@@ -104,7 +104,7 @@ impl Pass {
         let len = self.variants.len().try_into()?;
         writer.write_u16::<LittleEndian>(len)?;
         for variant in self.variants.iter() {
-            variant.write(writer)?;
+            variant.write(writer, version)?;
         }
         Ok(())
     }
@@ -115,10 +115,13 @@ pub struct Variant {
     pub flags: IndexMap<String, String>,
     pub shader_codes: IndexMap<PlatformShaderStage, ShaderCode>,
 }
-impl<'a> TryFromCtx<'a> for Variant {
-    type Error = scroll::Error;
+impl<'a> TryFromCtx<'a, MinecraftVersion> for Variant {
+    type Error = MyError;
 
-    fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
+    fn try_from_ctx(
+        buffer: &'a [u8],
+        version: MinecraftVersion,
+    ) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let is_supported = read_bool(buffer, &mut offset)?;
         let flag_count: u16 = buffer.gread_with(&mut offset, LE)?;
@@ -131,7 +134,7 @@ impl<'a> TryFromCtx<'a> for Variant {
         }
         let mut shader_codes = IndexMap::with_capacity(shader_code_count.into());
         for _ in 0..shader_code_count {
-            let stage: PlatformShaderStage = buffer.gread(&mut offset)?;
+            let stage: PlatformShaderStage = buffer.gread_with(&mut offset, version)?;
             let shader_code: ShaderCode = buffer.gread(&mut offset)?;
             shader_codes.insert(stage, shader_code);
         }
@@ -146,7 +149,7 @@ impl<'a> TryFromCtx<'a> for Variant {
     }
 }
 impl Variant {
-    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W, version: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
     {
@@ -160,7 +163,7 @@ impl Variant {
             write_string(flag.1, writer)?;
         }
         for (platform_stage, code) in self.shader_codes.iter() {
-            platform_stage.write(writer)?;
+            platform_stage.write(writer, version)?;
             code.write(writer)?;
         }
 
@@ -184,7 +187,7 @@ pub enum BlendMode {
     SrcAlpha,
 }
 impl<'a> TryFromCtx<'a> for BlendMode {
-    type Error = scroll::Error;
+    type Error = MyError;
     #[inline(never)]
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u16 = buffer.pread_with(0, LE)?;
@@ -201,7 +204,7 @@ impl<'a> TryFromCtx<'a> for BlendMode {
             9 => Self::MultiplyBoth,
             10 => Self::InverseSrcAlpha,
             11 => Self::SrcAlpha,
-            _ => return Err(scroll::Error::Custom(format!("Invalid blend_mode: {int}"))),
+            _ => return Err(scroll::Error::Custom(format!("Invalid blend_mode: {int}")).into()),
         };
         Ok((enum_type, 2))
     }
@@ -243,36 +246,70 @@ pub enum ShaderCodePlatform {
     Nvn,          //?
     Pssl,         //?
 }
-
-impl<'a> TryFromCtx<'a> for ShaderCodePlatform {
-    type Error = scroll::Error;
+const PLATFORMS: [ShaderCodePlatform; 16] = [
+    ShaderCodePlatform::Direct3DSm40,
+    ShaderCodePlatform::Direct3DSm50,
+    ShaderCodePlatform::Direct3DSm60,
+    ShaderCodePlatform::Direct3DSm65,
+    ShaderCodePlatform::Direct3DXB1,
+    ShaderCodePlatform::Direct3DXBX,
+    ShaderCodePlatform::Glsl120,
+    ShaderCodePlatform::Glsl120,
+    ShaderCodePlatform::Glsl430,
+    ShaderCodePlatform::Essl100,
+    ShaderCodePlatform::Essl300,
+    ShaderCodePlatform::Essl310,
+    ShaderCodePlatform::Metal,
+    ShaderCodePlatform::Vulkan,
+    ShaderCodePlatform::Nvn,
+    ShaderCodePlatform::Pssl,
+];
+impl<'a> TryFromCtx<'a, MinecraftVersion> for ShaderCodePlatform {
+    type Error = MyError;
     #[inline(never)]
-    fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
+    fn try_from_ctx(
+        buffer: &'a [u8],
+        version: MinecraftVersion,
+    ) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
-        let enum_type = match int {
-            0 => Self::Direct3DSm40,
-            1 => Self::Direct3DSm50,
-            2 => Self::Direct3DSm60,
-            3 => Self::Direct3DSm65,
-            4 => Self::Direct3DXB1,
-            5 => Self::Direct3DXBX,
-            6 => Self::Glsl120,
-            7 => Self::Glsl430,
-            8 => Self::Essl100,
-            9 => Self::Essl300,
-            10 => Self::Essl310,
-            11 => Self::Metal,
-            12 => Self::Vulkan,
-            13 => Self::Nvn,
-            14 => Self::Pssl,
-            _ => {
+        let mut version_list = PLATFORMS
+            .into_iter()
+            .filter(|v| version < MinecraftVersion::V1_21_20 && *v != ShaderCodePlatform::Essl100);
+        // .filter(|p| version < MinecraftVersion::V26_0_24 && *p != ShaderCodePlatform::Essl300);
+
+        let enum_type = match version_list.nth(int.into()) {
+            Some(yay) => yay,
+            None => {
                 return Err(scroll::Error::BadInput {
                     size: 0,
                     msg: "Invalid ShaderCodePlatform",
-                })
+                }
+                .into())
             }
         };
         Ok((enum_type, 1))
+    }
+}
+impl Display for ShaderCodePlatform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Direct3DSm40 => "Direct3D_SM40",
+            Self::Direct3DSm50 => "Direct3D_SM50",
+            Self::Direct3DSm60 => "Direct3D_SM60",
+            Self::Direct3DSm65 => "Direct3D_SM65",
+            Self::Direct3DXB1 => "Direct3D_XB1",
+            Self::Direct3DXBX => "Direct3D_XBX",
+            Self::Glsl120 => "GLSL_120",
+            Self::Glsl430 => "GLSL_430",
+            Self::Essl100 => "ESSL_100",
+            Self::Essl300 => "ESSL_300",
+            Self::Essl310 => "ESSL_310",
+            Self::Metal => "Metal",
+            Self::Vulkan => "Vulkan",
+            Self::Nvn => "Nvn",
+            Self::Pssl => "PSSL",
+        };
+        write!(f, "{name}")
     }
 }
 #[derive(Debug)]
@@ -282,7 +319,7 @@ pub struct ShaderCode {
     pub bgfx_shader_data: Vec<u8>,
 }
 impl<'a> TryFromCtx<'a> for ShaderCode {
-    type Error = scroll::Error;
+    type Error = MyError;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
@@ -335,7 +372,7 @@ pub struct ShaderInput {
 }
 
 impl<'a> TryFromCtx<'a> for ShaderInput {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let input_type: ShaderInputType = buffer.gread(&mut offset)?;
@@ -401,7 +438,7 @@ pub enum ShaderInputType {
     Mat4,
 }
 impl<'a> TryFromCtx<'a> for ShaderInputType {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
         let enum_type = match int {
@@ -418,7 +455,7 @@ impl<'a> TryFromCtx<'a> for ShaderInputType {
             10 => Self::UInt3,
             11 => Self::UInt4,
             12 => Self::Mat4,
-            _ => return Err(scroll::Error::Custom(format!("Invalid ShaderInputType"))),
+            _ => return Err(scroll::Error::Custom(format!("Invalid ShaderInputType")).into()),
         };
         Ok((enum_type, 1))
     }
@@ -433,7 +470,7 @@ pub enum PrecisionConstraint {
 }
 
 impl<'a> TryFromCtx<'a> for PrecisionConstraint {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
         let enum_type = match int {
@@ -441,9 +478,9 @@ impl<'a> TryFromCtx<'a> for PrecisionConstraint {
             1 => Self::Medium,
             2 => Self::High,
             _ => {
-                return Err(scroll::Error::Custom(format!(
-                    "Invalid PrecisionConstraint: {int}"
-                )))
+                return Err(
+                    scroll::Error::Custom(format!("Invalid PrecisionConstraint: {int}")).into(),
+                )
             }
         };
         Ok((enum_type, 1))
@@ -458,7 +495,7 @@ pub enum InterpolationConstraint {
     Centroid,
 }
 impl<'a> TryFromCtx<'a> for InterpolationConstraint {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
         let enum_type = match int {
@@ -469,7 +506,8 @@ impl<'a> TryFromCtx<'a> for InterpolationConstraint {
             _ => {
                 return Err(scroll::Error::Custom(format!(
                     "Invalid InterpolationConstraint: {int}"
-                )))
+                ))
+                .into())
             }
         };
         Ok((enum_type, 1))
@@ -500,7 +538,7 @@ pub enum Attribute {
     FrontFacing,
 }
 impl<'a> TryFromCtx<'a> for Attribute {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let index: u8 = buffer.pread(0)?;
         let sub_index: u8 = buffer.pread(1)?;
@@ -529,7 +567,8 @@ impl<'a> TryFromCtx<'a> for Attribute {
                 return Err(scroll::Error::Custom(format!(
                     "Attribute tuple[{:?}] is invalid",
                     (index, sub_index)
-                )))
+                ))
+                .into())
             }
         };
         Ok((enum_type, 2))
@@ -573,7 +612,7 @@ pub enum ShaderStage {
 }
 
 impl<'a> TryFromCtx<'a> for ShaderStage {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let int: u8 = buffer.pread_with(0, LE)?;
         let enum_type = match int {
@@ -581,7 +620,7 @@ impl<'a> TryFromCtx<'a> for ShaderStage {
             1 => Self::Fragment,
             2 => Self::Compute,
             3 => Self::Unknown,
-            _ => return Err(scroll::Error::Custom(format!("Invalid ShaderStage: {int}"))),
+            _ => return Err(scroll::Error::Custom(format!("Invalid ShaderStage: {int}")).into()),
         };
         Ok((enum_type, 1))
     }
@@ -593,15 +632,15 @@ pub struct PlatformShaderStage {
     pub stage: ShaderStage,
     pub platform: ShaderCodePlatform,
 }
-impl<'a> TryFromCtx<'a> for PlatformShaderStage {
-    type Error = scroll::Error;
+impl<'a> TryFromCtx<'a, MinecraftVersion> for PlatformShaderStage {
+    type Error = MyError;
 
-    fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
+    fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let stage_name = read_string(buffer, &mut offset)?;
         let platform_name = read_string(buffer, &mut offset)?;
         let stage: ShaderStage = buffer.gread(&mut offset)?;
-        let platform: ShaderCodePlatform = buffer.gread(&mut offset)?;
+        let platform: ShaderCodePlatform = buffer.gread_with(&mut offset, ctx)?;
         Ok((
             Self {
                 stage_name,
@@ -614,12 +653,12 @@ impl<'a> TryFromCtx<'a> for PlatformShaderStage {
     }
 }
 impl PlatformShaderStage {
-    pub fn write<W>(&self, writer: &mut W) -> Result<(), WriteError>
+    pub fn write<W>(&self, writer: &mut W, ctx: MinecraftVersion) -> Result<(), WriteError>
     where
         W: Write,
     {
         write_string(&self.stage_name, writer)?;
-        write_string(&self.platform_name, writer)?;
+        write_string(&self.platform.to_string(), writer)?;
         writer.write_u8(self.stage as u8)?;
         writer.write_u8(self.platform as u8)?;
         Ok(())

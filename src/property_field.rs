@@ -1,4 +1,4 @@
-use crate::{common::read_bool, WriteError};
+use crate::{common::read_bool, MyError, WriteError};
 use byteorder::WriteBytesExt;
 use scroll::{ctx::TryFromCtx, Pread};
 use std::io::Write;
@@ -10,7 +10,7 @@ pub struct PropertyField {
     pub matrix_data: Option<Vec<u8>>,
 }
 impl<'a> TryFromCtx<'a> for PropertyField {
-    type Error = scroll::Error;
+    type Error = MyError;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
@@ -92,7 +92,7 @@ pub enum PropertyType {
     External,
 }
 impl<'a> TryFromCtx<'a> for PropertyType {
-    type Error = scroll::Error;
+    type Error = MyError;
 
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let property_type: u16 = buffer.pread(0)?;
@@ -104,7 +104,8 @@ impl<'a> TryFromCtx<'a> for PropertyType {
             _ => {
                 return Err(scroll::Error::Custom(format!(
                     "property type is invalid: {property_type}"
-                )))
+                ))
+                .into())
             }
         };
         Ok((enum_type, 2))

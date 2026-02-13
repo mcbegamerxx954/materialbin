@@ -4,7 +4,9 @@ use pass::Pass;
 use property_field::PropertyField;
 use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
-use std::{cmp::Ordering, convert::identity, io::Write};
+use std::{
+    backtrace::Backtrace, cmp::Ordering, convert::identity, error::Error, fmt::Display, io::Write,
+};
 pub mod bgfx_shader;
 #[cfg(feature = "ffi")]
 mod cffi;
@@ -59,7 +61,7 @@ pub struct CompiledMaterialDefinition {
     pub passes: IndexMap<String, Pass>,
 }
 impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
-    type Error = scroll::Error;
+    type Error = MyError;
 
     fn try_from_ctx(buffer: &'a [u8], ctx: MinecraftVersion) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
@@ -68,27 +70,31 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Invalid starting magic",
-            });
+            }
+            .into());
         }
         if read_string(buffer, &mut offset)? != "RenderDragon.CompiledMaterialDefinition" {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Invalid definition",
-            });
+            }
+            .into());
         }
         let version: u64 = buffer.gread_with(&mut offset, LE)?;
         if version == 23 && ctx != MinecraftVersion::V26_0_24 {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Wrong material bin version",
-            });
+            }
+            .into());
         }
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
         if encryption_variant.is_encrypted() {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Encrypted files are not supported.",
-            });
+            }
+            .into());
         }
         let name = read_string(buffer, &mut offset)?;
         let mut parent_name = None;
@@ -135,13 +141,14 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Invalid ending magic",
-            });
+            }
+            .into());
         }
         // if offset != buffer.len() - 1 {
         //     return Err(scroll::Error::BadInput {
         //         size: offset,
         //         msg: "Tragic news",
-        //     });
+        //     }.into());
         // }
         Ok((
             Self {
@@ -169,7 +176,7 @@ impl CompiledMaterialDefinition {
         if version == MinecraftVersion::V26_0_24 {
             writer.write_u64::<LittleEndian>(23)?;
         } else {
-            writer.write_u64::<LittleEndian>(self.version)?;
+            writer.write_u64::<LittleEndian>(22)?;
         }
         self.encryption_variant.write(writer)?;
         write_string(&self.name, writer)?;
@@ -218,7 +225,7 @@ pub enum EncryptionVariant {
     KeyPair,
 }
 impl<'a> TryFromCtx<'a> for EncryptionVariant {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(buffer: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let encryption: u32 = buffer.gread_with(&mut offset, LE)?;
@@ -230,7 +237,8 @@ impl<'a> TryFromCtx<'a> for EncryptionVariant {
                 return Err(scroll::Error::BadInput {
                     size: 0,
                     msg: "Invalid EncryptionVariant: {encryption}",
-                });
+                }
+                .into());
             }
         };
         Ok((enum_type, offset))
@@ -290,4 +298,39 @@ macro_rules! option_read {
             None
         }
     };
+}
+#[derive(Debug)]
+pub struct MyError {
+    backtrace: Box<Backtrace>,
+    thingy: MyErrorThingy,
+}
+impl From<scroll::Error> for MyError {
+    fn from(value: scroll::Error) -> Self {
+        Self {
+            backtrace: Box::new(Backtrace::capture()),
+            thingy: MyErrorThingy::Scroll(value),
+        }
+    }
+}
+
+impl MyError {
+    pub fn get_backtracey(&self) -> &Box<Backtrace> {
+        &self.backtrace
+    }
+}
+impl Display for MyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.thingy)
+    }
+}
+#[derive(Debug)]
+pub enum MyErrorThingy {
+    Scroll(scroll::Error),
+}
+impl Display for MyErrorThingy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Scroll(e) => write!(f, "{e}"),
+        }
+    }
 }

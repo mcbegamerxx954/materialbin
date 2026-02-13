@@ -5,7 +5,7 @@ use scroll::{
 };
 use std::io::Write;
 
-use crate::WriteError;
+use crate::{MyError, WriteError};
 pub struct BgfxShader {
     pub magic: u32,
     pub hash: u32,
@@ -15,7 +15,7 @@ pub struct BgfxShader {
     pub size: Option<u16>,
 }
 impl<'a> TryFromCtx<'a> for BgfxShader {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(input: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let offset = &mut 0;
         let magic = input.gread_with(offset, LE)?;
@@ -26,9 +26,9 @@ impl<'a> TryFromCtx<'a> for BgfxShader {
             .collect();
         let code_len: u32 = input.gread_with(offset, LE)?;
         let code_len: usize = code_len.try_into().map_err(|e| {
-            scroll::Error::Custom(format!(
-                "Code len: {code_len} does not fit in usize, error: {e}"
-            ))
+            scroll::Error::Custom(
+                format!("Code len: {code_len} does not fit in usize, error: {e}").into(),
+            )
         })?;
         let code = input.gread_with::<&[u8]>(offset, code_len)?.to_vec();
         let _dumbbyte: u8 = input.gread(offset)?;
@@ -92,7 +92,7 @@ pub struct Uniform {
 }
 
 impl<'a> TryFromCtx<'a> for Uniform {
-    type Error = scroll::Error;
+    type Error = MyError;
     fn try_from_ctx(input: &'a [u8], _: ()) -> Result<(Self, usize), Self::Error> {
         let mut offset = 0;
         let str_len: u8 = input.gread(&mut offset)?;
