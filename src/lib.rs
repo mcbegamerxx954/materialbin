@@ -133,7 +133,7 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
         let mut passes = IndexMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
             let name = read_string(buffer, &mut offset)?;
-            let pass: Pass = buffer.gread(&mut offset)?;
+            let pass: Pass = buffer.gread_with(&mut offset, ctx)?;
             passes.insert(name, pass);
         }
         // Just so we parse the whole thing
@@ -301,12 +301,14 @@ macro_rules! option_read {
 }
 #[derive(Debug)]
 pub struct MyError {
+    #[cfg(feature = "backtracing")]
     backtrace: Box<Backtrace>,
     thingy: MyErrorThingy,
 }
 impl From<scroll::Error> for MyError {
     fn from(value: scroll::Error) -> Self {
         Self {
+            #[cfg(feature = "backtracing")]
             backtrace: Box::new(Backtrace::capture()),
             thingy: MyErrorThingy::Scroll(value),
         }
@@ -314,6 +316,7 @@ impl From<scroll::Error> for MyError {
 }
 
 impl MyError {
+    #[cfg(feature = "backtracing")]
     pub fn get_backtracey(&self) -> &Box<Backtrace> {
         &self.backtrace
     }
