@@ -263,6 +263,7 @@ impl EncryptionVariant {
                 //   let mut offset = 0;
                 let encryption_key = read_array(data, offset)?;
                 let encryption_nonce = read_array(data, offset)?;
+                let encryption_nonce = trunc_slice(encryption_nonce, 12);
                 let content = read_array(data, offset)?;
                 let decrypt = aes_gcm::Aes256Gcm::new(
                     GenericArray::<u8, typenum::U32>::from_slice(encryption_key),
@@ -291,7 +292,9 @@ impl EncryptionVariant {
         *self != Self::None
     }
 }
-
+fn trunc_slice<T>(slice: &[T], len: usize) -> &[T] {
+    slice.get(..len).unwrap_or(slice)
+}
 #[derive(Debug)]
 pub enum WriteError {
     IntConvert(std::num::TryFromIntError),
