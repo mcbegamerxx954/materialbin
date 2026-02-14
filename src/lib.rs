@@ -1,12 +1,15 @@
+use aes::cipher::{generic_array::GenericArray, typenum};
+use aes_gcm::{
+    aead::{Aead, Payload},
+    KeyInit,
+};
 use byteorder::{LittleEndian, WriteBytesExt};
 use indexmap::IndexMap;
 use pass::Pass;
 use property_field::PropertyField;
 use sampler_definition::SamplerDefinition;
 use scroll::{ctx::TryFromCtx, Pread, LE};
-use std::{
-    backtrace::Backtrace, cmp::Ordering, convert::identity, error::Error, fmt::Display, io::Write,
-};
+use std::{backtrace::Backtrace, borrow::Cow, fmt::Display, io::Write};
 pub mod bgfx_shader;
 #[cfg(feature = "ffi")]
 mod cffi;
@@ -37,7 +40,7 @@ pub enum MinecraftVersion {
     #[default]
     V26_0_24,
 }
-
+type MBGenericArray = GenericArray<u8, typenum::U12>;
 impl std::fmt::Display for MinecraftVersion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -91,55 +94,50 @@ impl<'a> TryFromCtx<'a, MinecraftVersion> for CompiledMaterialDefinition {
             .into());
         }
         let encryption_variant: EncryptionVariant = buffer.gread(&mut offset)?;
-        if encryption_variant.is_encrypted() {
-            return Err(scroll::Error::BadInput {
-                size: offset,
-                msg: "Encrypted files are not supported.",
-            }
-            .into());
-        }
-        let name = read_string(buffer, &mut offset)?;
+        let cow_content = encryption_variant.handle_encryption(buffer, &mut offset)?;
+        let content = &*cow_content;
+        let name = read_string(content, &mut offset)?;
         let mut parent_name = None;
-        let has_parent_name = read_bool(buffer, &mut offset)?;
+        let has_parent_name = read_bool(content, &mut offset)?;
         if has_parent_name {
-            parent_name = Some(read_string(buffer, &mut offset)?);
+            parent_name = Some(read_string(content, &mut offset)?);
         }
-        let sampler_definition_count: u8 = buffer.gread_with(&mut offset, LE)?;
+        let sampler_definition_count: u8 = content.gread_with(&mut offset, LE)?;
         let mut sampler_definitions = IndexMap::with_capacity(sampler_definition_count.into());
         for _ in 0..sampler_definition_count {
-            let name = read_string(buffer, &mut offset)?;
-            let sampler_definition: SamplerDefinition = buffer.gread_with(&mut offset, ctx)?;
+            let name = read_string(content, &mut offset)?;
+            let sampler_definition: SamplerDefinition = content.gread_with(&mut offset, ctx)?;
             sampler_definitions.insert(name, sampler_definition);
         }
-        let property_field_count: u16 = buffer.gread_with(&mut offset, LE)?;
+        let property_field_count: u16 = content.gread_with(&mut offset, LE)?;
         let mut property_fields = IndexMap::with_capacity(property_field_count.into());
         for _ in 0..property_field_count {
-            let name = read_string(buffer, &mut offset)?;
-            let property_field: PropertyField = buffer.gread(&mut offset)?;
+            let name = read_string(content, &mut offset)?;
+            let property_field: PropertyField = content.gread(&mut offset)?;
             property_fields.insert(name, property_field);
         }
         let mut uniform_overrides = None;
         if ctx >= MinecraftVersion::V1_21_110 {
             if name != "Core/Builtins" {
                 let mut indexmap = IndexMap::new();
-                let builtin_count: u16 = buffer.gread_with(&mut offset, LE)?;
+                let builtin_count: u16 = content.gread_with(&mut offset, LE)?;
                 for _ in 0..builtin_count {
-                    let key = read_string(buffer, &mut offset)?;
-                    let value = read_string(buffer, &mut offset)?;
+                    let key = read_string(content, &mut offset)?;
+                    let value = read_string(content, &mut offset)?;
                     indexmap.insert(key, value);
                 }
                 uniform_overrides = Some(indexmap);
             }
         }
-        let pass_count: u16 = buffer.gread_with(&mut offset, LE)?;
+        let pass_count: u16 = content.gread_with(&mut offset, LE)?;
         let mut passes = IndexMap::with_capacity(pass_count.into());
         for _ in 0..pass_count {
-            let name = read_string(buffer, &mut offset)?;
-            let pass: Pass = buffer.gread_with(&mut offset, ctx)?;
+            let name = read_string(content, &mut offset)?;
+            let pass: Pass = content.gread_with(&mut offset, ctx)?;
             passes.insert(name, pass);
         }
         // Just so we parse the whole thing
-        if buffer.gread_with::<u64>(&mut offset, LE)? != MAGIC {
+        if content.gread_with::<u64>(&mut offset, LE)? != MAGIC {
             return Err(scroll::Error::BadInput {
                 size: offset,
                 msg: "Invalid ending magic",
@@ -249,6 +247,34 @@ impl<'a> TryFromCtx<'a> for EncryptionVariant {
     }
 }
 impl EncryptionVariant {
+    fn handle_encryption<'b>(
+        &self,
+        data: &'b [u8],
+        offset: &mut usize,
+    ) -> Result<Cow<'b, [u8]>, MyError> {
+        match self {
+            Self::None => Ok(Cow::Borrowed(data)),
+            Self::SimplePassphrase => Err(scroll::Error::BadInput {
+                size: 0,
+                msg: "SimplePassphrase encryption isnt supported yet",
+            }
+            .into()),
+            Self::KeyPair => {
+                //   let mut offset = 0;
+                let encryption_key = read_array(data, offset)?;
+                let encryption_nonce = read_array(data, offset)?;
+                let content = read_array(data, offset)?;
+                let decrypt = aes_gcm::Aes256Gcm::new(
+                    GenericArray::<u8, typenum::U32>::from_slice(encryption_key),
+                );
+                let decrypted =
+                    decrypt.decrypt(MBGenericArray::from_slice(encryption_nonce), content)?;
+                // The buffer got practically trimmed soo
+                *offset = 0;
+                Ok(Cow::Owned(decrypted))
+            }
+        }
+    }
     fn write<W>(&self, output: &mut W) -> Result<(), std::io::Error>
     where
         W: Write,
@@ -309,17 +335,26 @@ pub struct MyError {
     backtrace: Box<Backtrace>,
     thingy: MyErrorThingy,
 }
+
 impl From<scroll::Error> for MyError {
     fn from(value: scroll::Error) -> Self {
+        Self::new(MyErrorThingy::Scroll(value))
+    }
+}
+impl From<aes_gcm::Error> for MyError {
+    fn from(value: aes_gcm::Error) -> Self {
+        Self::new(MyErrorThingy::AesError(value))
+    }
+}
+impl MyError {
+    #[track_caller]
+    fn new(thingy: MyErrorThingy) -> Self {
         Self {
             #[cfg(feature = "backtracing")]
             backtrace: Box::new(Backtrace::capture()),
-            thingy: MyErrorThingy::Scroll(value),
+            thingy,
         }
     }
-}
-
-impl MyError {
     #[cfg(feature = "backtracing")]
     pub fn get_backtracey(&self) -> &Box<Backtrace> {
         &self.backtrace
@@ -333,11 +368,17 @@ impl Display for MyError {
 #[derive(Debug)]
 pub enum MyErrorThingy {
     Scroll(scroll::Error),
+    AesError(aes_gcm::Error),
 }
 impl Display for MyErrorThingy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Scroll(e) => write!(f, "{e}"),
+            Self::AesError(e) => write!(f, "aes error:{e}"),
         }
     }
+}
+fn read_array<'a>(buf: &'a [u8], offset: &mut usize) -> Result<&'a [u8], scroll::Error> {
+    let len: u32 = buf.gread_with(offset, LE)?;
+    buf.gread_with(offset, len as usize)
 }
