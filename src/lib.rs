@@ -254,12 +254,7 @@ impl EncryptionVariant {
     ) -> Result<Cow<'b, [u8]>, MyError> {
         match self {
             Self::None => Ok(Cow::Borrowed(data)),
-            Self::SimplePassphrase => Err(scroll::Error::BadInput {
-                size: 0,
-                msg: "SimplePassphrase encryption isnt supported yet",
-            }
-            .into()),
-            Self::KeyPair => {
+            Self::SimplePassphrase => {
                 //   let mut offset = 0;
                 let encryption_key = read_array(data, offset)?;
                 let encryption_nonce = read_array(data, offset)?;
@@ -274,6 +269,11 @@ impl EncryptionVariant {
                 *offset = 0;
                 Ok(Cow::Owned(decrypted))
             }
+            Self::KeyPair => Err(scroll::Error::BadInput {
+                size: 0,
+                msg: "We dont support PassKey decryption",
+            }
+            .into()),
         }
     }
     fn write<W>(&self, output: &mut W) -> Result<(), std::io::Error>
